@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Ghosting Artifact",
+    "alternative_names": ["Nyquist Ghost"],
+    "category": "Ghosting",
+    "description": "Repeated shifted images",
+    "explanation": "Phase inconsistencies during acquisition",
+    "remedies": "Improve phase correction",
+    "helpful": true,
+    "examples": ["ghost1.png", "ghost2.png"],
+    "references": ["paper1", "paper2"]
+  }
+]
