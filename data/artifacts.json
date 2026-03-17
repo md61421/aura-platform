@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "name": "Ghosting Artifact",
+    "category": "Ghosting",
+    "description": "Repeated shifted images in the phase encoding direction.",
+    "explanation": "Caused by phase inconsistencies during acquisition.",
+    "symptoms": ["duplicate", "shifted", "repeated"],
+    "remedies": "Improve phase correction and reduce motion.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 2,
+    "name": "Motion Artifact",
+    "category": "Motion",
+    "description": "Blurring or streaking due to patient movement.",
+    "explanation": "Occurs when patient moves during scan.",
+    "symptoms": ["blur", "streaking", "movement"],
+    "remedies": "Ask patient to stay still, use motion correction.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 3,
+    "name": "B0 Inhomogeneity",
+    "category": "Magnetic Field",
+    "description": "Distortion due to magnetic field variations.",
+    "explanation": "Field inhomogeneity affects signal consistency.",
+    "symptoms": ["distortion", "warping"],
+    "remedies": "Improve shimming.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 4,
+    "name": "B1 Inhomogeneity",
+    "category": "RF Field",
+    "description": "Uneven signal intensity across image.",
+    "explanation": "Caused by RF field non-uniformity.",
+    "symptoms": ["uneven brightness", "intensity variation"],
+    "remedies": "Adjust RF calibration.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 5,
+    "name": "Chemical Shift Artifact",
+    "category": "Frequency",
+    "description": "Misalignment between fat and water signals.",
+    "explanation": "Occurs due to different resonance frequencies.",
+    "symptoms": ["edge misalignment", "shift"],
+    "remedies": "Increase bandwidth.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 6,
+    "name": "Aliasing Artifact",
+    "category": "Sampling",
+    "description": "Wrap-around of image parts.",
+    "explanation": "Occurs when field of view is too small.",
+    "symptoms": ["wrap around", "overlap"],
+    "remedies": "Increase field of view.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 7,
+    "name": "Noise Artifact",
+    "category": "Signal",
+    "description": "Random grainy appearance.",
+    "explanation": "Low signal-to-noise ratio.",
+    "symptoms": ["grainy", "noisy"],
+    "remedies": "Increase signal averaging.",
+    "examples": ["https://placehold.co/300"]
+  },
+  {
+    "id": 8,
+    "name": "Susceptibility Artifact",
+    "category": "Magnetic Effects",
+    "description": "Signal loss near air/tissue boundaries.",
+    "explanation": "Caused by magnetic susceptibility differences.",
+    "symptoms": ["signal loss", "dark regions"],
+    "remedies": "Use spin echo sequences.",
+    "examples": ["https://placehold.co/300"]
+  }
+]

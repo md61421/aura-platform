@@ -1,109 +1,70 @@
-# AURA Platform
+# AURA Platform (Prototype)
 
-**Artifact User Repository for Perfusion Imaging**
+A simple prototype for exploring MRI perfusion imaging artifacts.
 
-## 🚀 Overview
-
-AURA aims to transform a static spreadsheet of perfusion imaging artifacts into an interactive, searchable, and image-centric web platform.
-
-Perfusion MRI data often contains artifacts that are difficult to identify and interpret. Currently, artifact knowledge is scattered and lacks structured exploration.
-
-This project proposes a scalable system where researchers and clinicians can:
-
-* Search artifacts based on visual patterns
-* Explore example images
-* Understand causes and remedies
-* Navigate artifacts across techniques (ASL, DSC, DCE, IVIM)
+This project demonstrates how artifact data (currently collected via forms like REDCap) can be transformed into an interactive interface for browsing and understanding imaging artifacts.
 
 ---
 
-## 🧩 Problem Statement
+## 🚀 What this prototype shows
 
-The current system (Google Sheets) has several limitations:
-
-* ❌ No efficient search or filtering
-* ❌ No image-based exploration
-* ❌ Poor scalability
-* ❌ Difficult to integrate with QC tools
+* Basic artifact gallery UI
+* Search by keyword (e.g., blur, motion)
+* Individual artifact detail page
+* Structured artifact data using JSON
 
 ---
 
-## 💡 Proposed Solution
+## 📸 Screenshots
 
-A full-stack platform with:
+### Gallery View
 
-* 🔍 Smart search & filtering
-* 🖼️ Image gallery for artifact exploration
-* 🧠 Structured artifact metadata
-* 🔗 Future integration with QC outputs
+![Gallery](./screenshots/gallery.png)
 
----
+### Detail View
 
-## 🏗️ Architecture
-
-Frontend (React / Next.js)
-↓
-Backend API (FastAPI)
-↓
-Database (PostgreSQL)
-↓
-Image Storage (Cloud / Local)
+![Detail](./screenshots/detail.png)
 
 ---
 
-## 🗂️ Data Model
+## 🧠 Idea
 
-Each artifact includes:
+This prototype focuses on:
 
-* Artifact Name
-* Alternative Names
-* Category (e.g., B0, Ghosting)
-* Description
-* Explanation
-* Remedies
-* Helpful (Yes/No)
-* Example Images
-* References
+* Turning raw data into a usable interface
+* Making artifacts easier to browse and understand
 
 ---
 
-## 🧪 Initial Plan
+## ⚙️ Run locally
 
-### Phase 1
-
-* Convert Excel → JSON
-* Build backend APIs
-* Basic frontend UI
-
-### Phase 2
-
-* Advanced filtering
-* Image viewer
-* Artifact comparison
-
-### Phase 3
-
-* QC tool integration
-* User contributions
+```bash
+git clone https://github.com/md61421/aura-platform.git
+cd aura-platform
+npm install
+npm run dev
+```
 
 ---
 
-## ⚙️ Tech Stack
+## ⚠️ Note
 
-* Frontend: React (Next.js)
-* Backend: FastAPI
-* Database: PostgreSQL
-* Storage: AWS S3 / Local
+This is a **frontend-only prototype** built in a short time to demonstrate the concept.
 
----
-
-## 📌 Current Status
-
-🚧 Initial architecture and planning phase
-🔜 Prototype implementation in progress
+* Data is static (JSON)
+* No backend integration yet
+* No real-time data syncing
 
 ---
 
-## 🤝 Contributions
+## 📌 Future scope
 
-Open to ideas and feedback from the OSIPI community.
+* Add more artifact data
+* Improve filtering & categorization
+
+---
+
+## 👤 Author
+
+Md Sahil
+https://github.com/md61421
