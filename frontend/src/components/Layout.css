@@ -31,14 +31,16 @@
 
 .logo {
   display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
+  align-items: center;
+  gap: 0.75rem;
   color: white;
   text-decoration: none;
+  transition: opacity 0.3s ease;
 }
 
 .logo:hover {
   text-decoration: none;
+  opacity: 0.9;
 }
 
 .logo-text {
@@ -51,6 +53,37 @@
   font-size: 0.9rem;
   font-weight: 400;
   opacity: 0.9;
+}
+
+.logo-image {
+  height: 48px;
+  width: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.logo-text-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.logo-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.logo-subtitle {
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 0.85;
+  letter-spacing: 0.3px;
 }
 
 .main-nav {
