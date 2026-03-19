@@ -27,9 +27,9 @@ function Home() {
   return (
     <div className="home-page animate-fade-in">
       <section className="hero-section" style={{textAlign: 'center', marginBottom: '1.5rem'}}>
-        <h1 style={{fontSize: '1.8rem', marginBottom: '0.5rem'}}>Perfusion Artifact Database</h1>
-        <p style={{fontSize: '1rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto'}}>
-          A comprehensive library for researchers and clinicians to identify and understand common perfusion MRI artifacts.
+        <h1 style={{fontSize: '2rem', marginBottom: '0.5rem'}}>Welcome to AURA</h1>
+        <p style={{fontSize: '1.1rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto'}}>
+          A User Repository of Artifacts for Perfusion Imaging
         </p>
       </section>
 
