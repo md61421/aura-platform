@@ -1,69 +1,76 @@
-import { useState, useMemo } from "react";
-import data from "../data.json";
-import SearchBar from "../components/SearchBar";
-import FilterBar from "../components/FilterBar";
+import FilterSidebar from "../components/FilterSidebar";
 import ArtifactCard from "../components/ArtifactCard";
+import SearchBar from "../components/SearchBar";
+import Pagination from "../components/Pagination";
+import { useArtifacts } from "../hooks/useArtifacts";
 
 function Home() {
-  const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("");
-  const [activeModality, setActiveModality] = useState("");
+  const { 
+    filteredArtifacts: filtered, 
+    isLoading,
+    query, 
+    setQuery, 
+    clearFilters
+  } = useArtifacts();
 
-  const categories = useMemo(() => [...new Set(data.map(a => a.category))], []);
-  const modalities = useMemo(() => [...new Set(data.map(a => a.modality))], []);
-
-  const filtered = data.filter((artifact) => {
-    const matchesQuery = 
-      artifact.name.toLowerCase().includes(query.toLowerCase()) ||
-      artifact.symptoms.some((s) => s.toLowerCase().includes(query.toLowerCase())) ||
-      artifact.category.toLowerCase().includes(query.toLowerCase());
-    
-    const matchesCategory = !activeCategory || artifact.category === activeCategory;
-    const matchesModality = !activeModality || artifact.modality === activeModality;
-
-    return matchesQuery && matchesCategory && matchesModality;
-  });
+  if (isLoading) {
+    return <div className="text-center py-20 text-gray-500">Loading artifacts...</div>;
+  }
 
   return (
-    <div className="home-page animate-fade-in">
-      <section className="hero-section" style={{textAlign: 'center', marginBottom: '1.5rem'}}>
-        <h1 style={{fontSize: '2rem', marginBottom: '0.5rem'}}>Welcome to AURA</h1>
-        <p style={{fontSize: '1.1rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto'}}>
+    <div className="animate-fade-in">
+      {/* Hero / Search */}
+      <div className="text-center max-w-3xl mx-auto mb-12">
+        <h1 className="text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">
+          Welcome to AURA
+        </h1>
+        <p className="text-lg text-gray-500 mb-8">
           A User Repository of Artifacts for Perfusion Imaging
         </p>
-      </section>
-
-
-      <SearchBar query={query} setQuery={setQuery} />
-      
-      <FilterBar 
-        activeCategory={activeCategory}
-        setActiveCategory={setActiveCategory}
-        activeModality={activeModality}
-        setActiveModality={setActiveModality}
-        categories={categories}
-        modalities={modalities}
-      />
-
-      <div className="results-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
-        <h2 className="section-title" style={{margin: 0}}>Artifact Library</h2>
-        <span style={{color: 'var(--text-muted)', fontWeight: 600}}>
-          Showing {filtered.length} results
-        </span>
+        
+        <SearchBar 
+          query={query} 
+          setQuery={setQuery} 
+        />
       </div>
 
-      <div className="grid">
-        {filtered.map((artifact) => (
-          <ArtifactCard key={artifact.id} artifact={artifact} />
-        ))}
-      </div>
-      
-      {filtered.length === 0 && (
-        <div style={{textAlign: 'center', padding: '5rem 0'}}>
-          <h3>No artifacts found matching your criteria.</h3>
-          <p>Try adjusting your filters or search query.</p>
+      <div className="flex flex-col lg:flex-row gap-8">
+        <FilterSidebar />
+
+        <div className="flex-1">
+          <div className="flex justify-between items-center mb-6">
+            <p className="text-sm text-gray-500">
+              Showing <span className="font-semibold text-gray-900">{filtered.length}</span> artifacts
+            </p>
+            <div className="flex items-center gap-2">
+              <button className="p-2 text-gray-400 hover:text-gray-900 transition-colors"><i className="fas fa-th-large"></i></button>
+              <button className="p-2 text-gray-400 hover:text-gray-900 transition-colors"><i className="fas fa-list"></i></button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filtered.map((artifact) => (
+              <ArtifactCard key={artifact.id} artifact={artifact} />
+            ))}
+          </div>
+          
+          {filtered.length > 0 && <Pagination />}
+
+          {filtered.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
+              <i className="fas fa-search text-4xl text-gray-300 mb-4"></i>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">No artifacts found</h3>
+              <p className="text-gray-500">Try adjusting your filters or search terms.</p>
+              <button 
+                onClick={clearFilters}
+                className="mt-4 text-brand-500 font-medium hover:underline"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

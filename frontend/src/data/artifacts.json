@@ -2,81 +2,183 @@
   {
     "id": 1,
     "name": "Ghosting Artifact",
+    "full_name": "Ghosting Artifact",
     "category": "Ghosting",
-    "description": "Repeated shifted images in the phase encoding direction.",
+    "alt_names": "duplicate, shifted, repeated",
     "explanation": "Caused by phase inconsistencies during acquisition.",
-    "symptoms": ["duplicate", "shifted", "repeated"],
+    "description": "Repeated shifted images in the phase encoding direction.",
     "remedies": "Improve phase correction and reduce motion.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "duplicate",
+      "shifted",
+      "repeated"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnJyhn5em5LZJibTadasig_C1DTiSimglRpw&s",
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnJyhn5em5LZJibTadasig_C1DTiSimglRpw&s"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   },
   {
     "id": 2,
     "name": "Motion Artifact",
+    "full_name": "Motion Artifact",
     "category": "Motion",
-    "description": "Blurring or streaking due to patient movement.",
+    "alt_names": "blur, streaking, movement",
     "explanation": "Occurs when patient moves during scan.",
-    "symptoms": ["blur", "streaking", "movement"],
+    "description": "Blurring or streaking due to patient movement.",
     "remedies": "Ask patient to stay still, use motion correction.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "blur",
+      "streaking",
+      "movement"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://prod-images-static.radiopaedia.org/images/4974802/f0de9e79e51dab06a0cc316beed5c9_gallery.jpg",
+      "https://prod-images-static.radiopaedia.org/images/4974802/f0de9e79e51dab06a0cc316beed5c9_gallery.jpg"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   },
   {
     "id": 3,
     "name": "B0 Inhomogeneity",
+    "full_name": "B0 Inhomogeneity",
     "category": "Magnetic Field",
-    "description": "Distortion due to magnetic field variations.",
+    "alt_names": "distortion, warping",
     "explanation": "Field inhomogeneity affects signal consistency.",
-    "symptoms": ["distortion", "warping"],
+    "description": "Distortion due to magnetic field variations.",
     "remedies": "Improve shimming.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "distortion",
+      "warping"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://ars.els-cdn.com/content/image/3-s2.0-B978012396973600006X-f06-01ac-9780123969736.jpg",
+      "https://ars.els-cdn.com/content/image/3-s2.0-B978012396973600006X-f06-01ac-9780123969736.jpg"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   },
   {
     "id": 4,
     "name": "B1 Inhomogeneity",
+    "full_name": "B1 Inhomogeneity",
     "category": "RF Field",
-    "description": "Uneven signal intensity across image.",
+    "alt_names": "uneven brightness, intensity variation",
     "explanation": "Caused by RF field non-uniformity.",
-    "symptoms": ["uneven brightness", "intensity variation"],
+    "description": "Uneven signal intensity across image.",
     "remedies": "Adjust RF calibration.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "uneven brightness",
+      "intensity variation"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://www.researchgate.net/profile/Laurens-De-Cocker/publication/310627412/figure/fig7/AS:434773375098886@1480669458694/B1-inhomogeneity-artifacts-on-a-7-T-MR-FLAIR-images-of-a-42-year-old-female-with-a-recent.png",
+      "https://www.researchgate.net/profile/Laurens-De-Cocker/publication/310627412/figure/fig7/AS:434773375098886@1480669458694/B1-inhomogeneity-artifacts-on-a-7-T-MR-FLAIR-images-of-a-42-year-old-female-with-a-recent.png"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   },
   {
     "id": 5,
     "name": "Chemical Shift Artifact",
+    "full_name": "Chemical Shift Artifact",
     "category": "Frequency",
-    "description": "Misalignment between fat and water signals.",
+    "alt_names": "edge misalignment, shift",
     "explanation": "Occurs due to different resonance frequencies.",
-    "symptoms": ["edge misalignment", "shift"],
+    "description": "Misalignment between fat and water signals.",
     "remedies": "Increase bandwidth.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "edge misalignment",
+      "shift"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQzSAuU7fh3_LRJO7pcSLR6pzMldGUT6WrDDA&s",
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQzSAuU7fh3_LRJO7pcSLR6pzMldGUT6WrDDA&s"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   },
   {
     "id": 6,
     "name": "Aliasing Artifact",
+    "full_name": "Aliasing Artifact",
     "category": "Sampling",
-    "description": "Wrap-around of image parts.",
+    "alt_names": "wrap around, overlap",
     "explanation": "Occurs when field of view is too small.",
-    "symptoms": ["wrap around", "overlap"],
+    "description": "Wrap-around of image parts.",
     "remedies": "Increase field of view.",
-    "examples": ["https://placehold.co/300"]
-  },
-  {
-    "id": 7,
-    "name": "Noise Artifact",
-    "category": "Signal",
-    "description": "Random grainy appearance.",
-    "explanation": "Low signal-to-noise ratio.",
-    "symptoms": ["grainy", "noisy"],
-    "remedies": "Increase signal averaging.",
-    "examples": ["https://placehold.co/300"]
-  },
-  {
-    "id": 8,
-    "name": "Susceptibility Artifact",
-    "category": "Magnetic Effects",
-    "description": "Signal loss near air/tissue boundaries.",
-    "explanation": "Caused by magnetic susceptibility differences.",
-    "symptoms": ["signal loss", "dark regions"],
-    "remedies": "Use spin echo sequences.",
-    "examples": ["https://placehold.co/300"]
+    "symptoms": [
+      "wrap around",
+      "overlap"
+    ],
+    "refs": [
+      {
+        "id": "1",
+        "text": "Generic Imaging Manual, 2026."
+      },
+      {
+        "id": "2",
+        "text": "Clinical Reference for Artifacts."
+      }
+    ],
+    "examples": [
+      "https://prod-images-static.radiopaedia.org/images/5600704/1c6680010b8a94452dff87eb7e9893_gallery.jpeg",
+      "https://prod-images-static.radiopaedia.org/images/5600704/1c6680010b8a94452dff87eb7e9893_gallery.jpeg"
+    ],
+    "sequence": "3D GRASE",
+    "date_added": "March 24, 2026"
   }
 ]
