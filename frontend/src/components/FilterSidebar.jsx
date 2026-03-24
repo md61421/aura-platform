@@ -7,7 +7,7 @@ const FilterSidebar = () => {
 
     return (
         <aside className="w-full lg:w-64 flex-shrink-0">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 sticky top-24">
+            <div className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-gray-200 lg:sticky lg:top-24">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
                     <button 
