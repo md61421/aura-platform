@@ -1,38 +1,26 @@
-import { Link } from "react-router-dom";
-import "./Layout.css";
+import Navbar from "./Navbar";
 
 function Layout({ children }) {
   return (
-    <div className="layout-wrapper">
-      <header className="main-header">
-        <div className="container header-content">
-          <Link to="/" className="logo">
-            <img 
-              src="https://avatars.githubusercontent.com/u/46761096?s=280&v=4" 
-              alt="AURA Platform Logo" 
-              className="logo-image"
-            />
-            <div className="logo-text-container">
-              <span className="logo-title">AURA</span>
-              <span className="logo-subtitle">OSIPI Artifacts</span>
-            </div>
-          </Link>
-          <nav className="main-nav">
-            <Link to="/" className="nav-link">Home</Link>
-            <Link to="/submit" className="btn btn-accent pulse-on-hover">Contribute</Link>
-          </nav>
-        </div>
-      </header>
-      
-      <main className="main-content container">
+    <div className="min-h-screen transition-colors duration-300">
+      <Navbar />
+      <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto min-h-screen">
         {children}
       </main>
-
-      <footer className="main-footer">
-        <div className="container footer-content">
-          <p>&copy; {new Date().getFullYear()} AURA Platform. Designed for Researchers & Clinicians.</p>
+      <footer className="bg-white border-t border-gray-200 py-8 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-xs">A</div>
+                <span className="font-semibold text-gray-900">AURA Platform</span>
+            </div>
+            <p className="text-sm text-gray-500">An OSIPI Project for standardizing perfusion imaging artifacts.</p>
+            <div className="flex space-x-6">
+                <a href="#" className="text-gray-400 hover:text-gray-500"><i className="fab fa-github"></i></a>
+                <a href="#" className="text-gray-400 hover:text-gray-500"><i className="fab fa-twitter"></i></a>
+            </div>
         </div>
       </footer>
+
     </div>
   );
 }
