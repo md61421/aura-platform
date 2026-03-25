@@ -52,7 +52,7 @@ const Navbar = () => {
 
                     {/* Desktop User Profile / Mobile Menu Button */}
                     <div className="flex items-center space-x-4">
-                        <Link to="/profile" className="hidden sm:flex items-center hover:opacity-80 transition-opacity">
+                        <Link to="" className="hidden sm:flex items-center hover:opacity-80 transition-opacity">
                             <img className="h-8 w-8 rounded-full border border-gray-300" src="https://ui-avatars.com/api/?name=Md+Sahil&background=0ea5e9&color=fff" alt="User" />
                         </Link>
                         
