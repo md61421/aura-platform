@@ -54,13 +54,13 @@ const Admin = () => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] text-white">JD</div>
-                                            <span className="text-sm text-gray-600 font-medium">Dr. Jane Doe</span>
+                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] text-white">AB</div>
+                                            <span className="text-sm text-gray-600 font-medium">Dr. ABC</span>
                                         </div>
                                         <div className="text-[10px] text-gray-400 mt-0.5">2 hours ago</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="text-sm text-gray-600 max-w-xs truncate">Subject moved during the scan...</div>
+                                        <div className="text-sm text-gray-600 max-w-xs truncate">Lorem ipsum dolor sit amet consectetur, adipisicing elit. Rerum, voluptatum!</div>
                                         <div className="flex gap-1 mt-1">
                                             <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">3 Images</span>
                                             <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">Siemens</span>
@@ -94,13 +94,13 @@ const Admin = () => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] text-white">MK</div>
-                                            <span className="text-sm text-gray-600 font-medium">Mark Kim</span>
+                                            <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] text-white">DE</div>
+                                            <span className="text-sm text-gray-600 font-medium">Dr. DEF</span>
                                         </div>
                                         <div className="text-[10px] text-gray-400 mt-0.5">Yesterday</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="text-sm text-gray-600 max-w-xs truncate">Signal loss at different tissue areas...</div>
+                                        <div className="text-sm text-gray-600 max-w-xs truncate">Lorem ipsum dolor sit, amet consectetur adipisicing elit. Quaerat, dicta!</div>
                                         <div className="flex gap-1 mt-1">
                                             <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">1 Image</span>
                                             <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">GE</span>

@@ -8,7 +8,7 @@ const Navbar = () => {
     const navLinks = [
         { name: 'Browse', path: '/' },
         { name: 'Submit Artifact', path: '/submit' },
-        { name: 'Review', path: '', badge: true },
+        { name: 'Review', path: '/admin', badge: true },
         { name: 'My Submissions', path: '' },
     ];
 
