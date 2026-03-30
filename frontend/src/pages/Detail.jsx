@@ -150,7 +150,7 @@ function Detail() {
                     )}
                     
                     <div className="mt-auto pt-6 border-t border-gray-200 flex gap-4">
-                        <button onClick={() => navigate('')} className="flex-1 bg-white border-2 border-brand-500 text-brand-600 hover:bg-brand-50 font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        <button onClick={() => navigate('/compare')} className="flex-1 bg-white border-2 border-brand-500 text-brand-600 hover:bg-brand-50 font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
                             <i className="fas fa-not-equal"></i> Compare Artifact
                         </button>
                         <button className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2">
