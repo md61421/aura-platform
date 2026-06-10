@@ -53,6 +53,7 @@ build/
 coverage/
 
 # Docker/local compose overrides
+docker-compose.yml
 docker-compose.override.yml
 
 # IDE/editor and OS files
