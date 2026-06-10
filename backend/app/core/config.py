@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
-    DATABASE_URL: str = (
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/aura"
+    DATABASE_URL: str = Field(
+        ...,
+        description="SQLAlchemy database URL. Set via environment or a private .env file.",
     )
     STORAGE_PROVIDER: str = "local_dev"
     PRIVATE_STORAGE_BUCKET: str = "aura-submissions-staging"
