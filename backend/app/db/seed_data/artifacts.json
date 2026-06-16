@@ -1,0 +1,128 @@
+{
+  "tags": [
+    {
+      "name": "General",
+      "tag_type": "artifact_category",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "ALL",
+      "tag_type": "other",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "magnetic-field",
+      "tag_type": "artifact_category",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "distortion",
+      "tag_type": "visual_symptom",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "signal-void",
+      "tag_type": "visual_symptom",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "intensity-variation",
+      "tag_type": "visual_symptom",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "RF",
+      "tag_type": "hardware",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "hardware",
+      "tag_type": "hardware",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "zipper",
+      "tag_type": "visual_symptom",
+      "modality_scope": "ALL"
+    },
+    {
+      "name": "shading",
+      "tag_type": "visual_symptom",
+      "modality_scope": "ALL"
+    }
+  ],
+  "artifacts": [
+    {
+      "title": "Magnetic susceptibility artifact",
+      "aliases": [],
+      "explanation": "Magnetic susceptibility artifacts happen when materials with different magnetic properties disturb the main magnetic field, causing local B0 inhomogeneity.",
+      "visual_description": "Signal voids, local distortion, or signal pile-up can appear near metal, air-tissue interfaces, or other strong susceptibility boundaries.",
+      "remedies": [
+        {
+          "stage": "prevention",
+          "text": "Remove metallic objects when possible and screen the imaging setup carefully."
+        },
+        {
+          "stage": "during_acquisition",
+          "text": "Use careful shimming and consider sequences or parameters that reduce susceptibility sensitivity."
+        }
+      ],
+      "default_modality": "ALL",
+      "status": "approved",
+      "tags": ["General", "ALL", "magnetic-field", "signal-void", "distortion"]
+    },
+    {
+      "title": "B0 inhomogeneity effect",
+      "aliases": ["Geometric distortion artifact"],
+      "explanation": "B0 inhomogeneity causes spins to dephase faster and can shift signal spatially, especially in sequences sensitive to field variation.",
+      "visual_description": "Images may show geometric warping, local stretching or compression, and signal dropout in affected regions.",
+      "remedies": [
+        {
+          "stage": "prevention",
+          "text": "Perform shimming before acquisition."
+        },
+        {
+          "stage": "during_acquisition",
+          "text": "Reduce echo time when possible and use acquisition choices that are less sensitive to B0 variation."
+        }
+      ],
+      "default_modality": "ALL",
+      "status": "approved",
+      "tags": ["General", "ALL", "magnetic-field", "distortion", "signal-void"]
+    },
+    {
+      "title": "B1 inhomogeneity effect",
+      "aliases": ["Wavelength effect"],
+      "explanation": "B1 inhomogeneity occurs when RF excitation is spatially uneven, so spins are not flipped as intended across the field of view.",
+      "visual_description": "The image can show shading or broad regional intensity variation, with some areas appearing darker or brighter than expected.",
+      "remedies": [
+        {
+          "stage": "during_acquisition",
+          "text": "Use RF shimming, dielectric pads, or a dual-transmit setup when available."
+        }
+      ],
+      "default_modality": "ALL",
+      "status": "approved",
+      "tags": ["General", "ALL", "RF", "shading", "intensity-variation"]
+    },
+    {
+      "title": "RF interferences",
+      "aliases": ["Radiofrequency spike", "Zipper artifact"],
+      "explanation": "RF interference is caused by unwanted radiofrequency sources leaking into the MRI signal chain or acquisition environment.",
+      "visual_description": "A narrow bright or dark line can cross the image, often resembling a zipper-like stripe in a consistent direction.",
+      "remedies": [
+        {
+          "stage": "prevention",
+          "text": "Check room shielding, door closure, cables, coils, and nearby RF-emitting equipment."
+        },
+        {
+          "stage": "during_acquisition",
+          "text": "Repeat the scan after removing or isolating the suspected interference source."
+        }
+      ],
+      "default_modality": "ALL",
+      "status": "approved",
+      "tags": ["General", "ALL", "RF", "hardware", "zipper"]
+    }
+  ]
+}
