@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     STORAGE_PROVIDER: str = "local_dev"
     PRIVATE_STORAGE_BUCKET: str = "aura-submissions-staging"
     APPROVED_STORAGE_BUCKET: str = "aura-approved-artifacts"
+    LOCAL_STORAGE_ROOT: str = "uploads"
+    DEV_AUTO_APPROVE_SUBMISSIONS: bool = True
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
