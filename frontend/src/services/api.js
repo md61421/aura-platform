@@ -154,7 +154,7 @@ const mapArtifact = (artifact) => {
         full_name: title,
         category: deriveCategory(artifact),
         alt_names: aliases.join(", "),
-        description: firstText(visualDescription, explanation, "No description available yet."),
+        description: visualDescription,
         remedies: formatRemedies(artifact.remedies),
         symptoms: tags,
         refs: [],
