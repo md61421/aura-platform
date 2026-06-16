@@ -1,182 +1,118 @@
-from datetime import UTC, datetime
+import json
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag, User
-from app.db.models.enums import (
-    ArtifactStatus,
-    FileRole,
-    FileType,
-    ImageArtifactRelationshipType,
-    ImageVisibilityStatus,
-    Modality,
-    StorageProvider,
-    SubmissionStatus,
-    TagType,
-    UserRole,
-)
+from app.db.models import Artifact, ArtifactTag, Tag, User
+from app.db.models.enums import ArtifactStatus, Modality, TagType, UserRole
 from app.db.session import SessionLocal
+
+SEED_DATA_PATH = Path(__file__).with_name("seed_data") / "artifacts.json"
+REVIEWER_EMAIL = "reviewer@aura.local"
+
+
+def parse_enum(enum_class, value: str | None, default):
+    if not value:
+        return default
+    return enum_class(value)
+
+
+def load_seed_data() -> dict[str, Any]:
+    with SEED_DATA_PATH.open(encoding="utf-8") as seed_file:
+        return json.load(seed_file)
 
 
 def get_or_create_user(db: Session) -> User:
-    user = db.scalar(select(User).where(User.email == "reviewer@aura.local"))
+    user = db.scalar(select(User).where(User.email == REVIEWER_EMAIL))
     if user:
+        user.name = "AURA Reviewer"
+        user.role = UserRole.REVIEWER
         return user
 
     user = User(
         name="AURA Reviewer",
-        email="reviewer@aura.local",
+        email=REVIEWER_EMAIL,
         role=UserRole.REVIEWER,
     )
     db.add(user)
+    db.flush()
     return user
 
 
-def seed(db: Session) -> None:
-    existing_image = db.scalar(select(Image).where(Image.title == "Example ASL motion artifact case"))
-    if existing_image:
-        print("Seed data already exists.")
-        return
+def get_or_create_tag(db: Session, data: dict[str, Any]) -> Tag:
+    tag = db.scalar(select(Tag).where(Tag.name == data["name"]))
+    tag_type = parse_enum(TagType, data.get("tag_type"), TagType.OTHER)
+    modality_scope = parse_enum(Modality, data.get("modality_scope"), Modality.ALL)
 
-    reviewer = get_or_create_user(db)
+    if tag:
+        tag.tag_type = tag_type
+        tag.modality_scope = modality_scope
+        tag.is_active = data.get("is_active", True)
+        return tag
 
-    motion = Artifact(
-        title="Motion artifact",
-        aliases=["patient motion", "head motion"],
-        explanation="Motion during acquisition can create ghosting, blurring, or misregistration.",
-        visual_description="Repeated edges, shifted anatomy, or mismatch between perfusion and structural images.",
-        remedies=[
-            {"stage": "prevention", "text": "Use patient padding and clear breathing instructions."},
-            {"stage": "post_processing", "text": "Check registration and consider motion correction."},
-        ],
-        default_modality=Modality.ASL,
-        status=ArtifactStatus.APPROVED,
+    tag = Tag(
+        name=data["name"],
+        tag_type=tag_type,
+        modality_scope=modality_scope,
+        is_active=data.get("is_active", True),
     )
-    low_snr = Artifact(
-        title="Low SNR",
-        aliases=["noisy perfusion", "low signal"],
-        explanation="Low signal-to-noise ratio can make perfusion maps grainy or unreliable.",
-        visual_description="Speckled CBF map with poor gray-white matter contrast.",
-        remedies=[{"stage": "review", "text": "Inspect raw control/tag pairs and M0 image quality."}],
-        default_modality=Modality.ASL,
-        status=ArtifactStatus.APPROVED,
-    )
-    labeling_failure = Artifact(
-        title="Labeling failure",
-        aliases=["poor labeling", "inversion failure"],
-        explanation="ASL labeling problems can reduce or distort perfusion contrast.",
-        visual_description="Unexpectedly low perfusion signal across vascular territories.",
-        remedies=[{"stage": "acquisition", "text": "Check labeling plane placement and scanner protocol."}],
-        default_modality=Modality.ASL,
-        status=ArtifactStatus.APPROVED,
-    )
-
-    motion_tag = Tag(
-        name="motion",
-        tag_type=TagType.PATIENT_INDUCED,
-        modality_scope=Modality.ALL,
-    )
-    asl_tag = Tag(
-        name="ASL",
-        tag_type=TagType.ASL_SPECIFIC,
-        modality_scope=Modality.ASL,
-    )
-    ghosting_tag = Tag(
-        name="ghosting",
-        tag_type=TagType.VISUAL_SYMPTOM,
-        modality_scope=Modality.ALL,
-    )
-
-    submission = Submission(
-        submitted_by=reviewer,
-        contact_email="contributor@example.org",
-        status=SubmissionStatus.APPROVED,
-        permission_confirmed=True,
-        pseudonymisation_confirmed=True,
-        submitter_notes="Example seed case using object-storage references only.",
-        submitted_at=datetime.now(UTC),
-        reviewed_at=datetime.now(UTC),
-    )
-
-    image = Image(
-        submission=submission,
-        title="Example ASL motion artifact case",
-        caption="ASL perfusion example with motion as the primary artifact and secondary low SNR findings.",
-        modality=Modality.ASL,
-        vendor="Siemens",
-        sequence="pCASL",
-        protocol="3D GRASE pCASL",
-        field_strength="3T",
-        visibility_status=ImageVisibilityStatus.APPROVED_PUBLIC,
-        reliability_score=2,
-    )
-
-    db.add_all(
-        [
-            motion,
-            low_snr,
-            labeling_failure,
-            motion_tag,
-            asl_tag,
-            ghosting_tag,
-            submission,
-            image,
-        ]
-    )
+    db.add(tag)
     db.flush()
+    return tag
 
-    db.add_all(
-        [
-            ArtifactTag(artifact=motion, tag=motion_tag),
-            ArtifactTag(artifact=motion, tag=ghosting_tag),
-            ArtifactTag(artifact=motion, tag=asl_tag),
-            ArtifactTag(artifact=low_snr, tag=asl_tag),
-            ImageArtifact(
-                image=image,
-                artifact=motion,
-                relationship_type=ImageArtifactRelationshipType.PRIMARY,
-                note="Dominant visible issue.",
-            ),
-            ImageArtifact(
-                image=image,
-                artifact=low_snr,
-                relationship_type=ImageArtifactRelationshipType.SECONDARY,
-                note="Noise also affects interpretation.",
-            ),
-            ImageArtifact(
-                image=image,
-                artifact=labeling_failure,
-                relationship_type=ImageArtifactRelationshipType.SECONDARY,
-                note="Included to demonstrate multiple secondary artifacts.",
-            ),
-            ImageFile(
-                image=image,
-                file_role=FileRole.PERFUSION,
-                file_type=FileType.NII_GZ,
-                storage_provider=StorageProvider.AWS_S3,
-                storage_bucket="aura-approved-private",
-                storage_key="asl/examples/motion_case_001/perfusion.nii.gz",
-                is_public=False,
-                file_size_mb=18.4,
-                checksum="sha256:example-perfusion-checksum",
-            ),
-            ImageFile(
-                image=image,
-                file_role=FileRole.THUMBNAIL,
-                file_type=FileType.JPG,
-                storage_provider=StorageProvider.AWS_S3,
-                storage_bucket="aura-approved-public",
-                storage_key="asl/examples/motion_case_001/thumbnail.jpg",
-                public_url="https://cdn.example.org/asl/examples/motion_case_001/thumbnail.jpg",
-                is_public=True,
-                file_size_mb=0.32,
-                checksum="sha256:example-thumbnail-checksum",
-            ),
-        ]
-    )
+
+def upsert_artifact(db: Session, data: dict[str, Any]) -> Artifact:
+    artifact = db.scalar(select(Artifact).where(Artifact.title == data["title"]))
+    default_modality = parse_enum(Modality, data.get("default_modality"), Modality.UNKNOWN)
+    status = parse_enum(ArtifactStatus, data.get("status"), ArtifactStatus.APPROVED)
+
+    if not artifact:
+        artifact = Artifact(title=data["title"])
+        db.add(artifact)
+
+    artifact.aliases = data.get("aliases", [])
+    artifact.explanation = data.get("explanation")
+    artifact.visual_description = data.get("visual_description")
+    artifact.remedies = data.get("remedies", [])
+    artifact.default_modality = default_modality
+    artifact.status = status
+    db.flush()
+    return artifact
+
+
+def link_artifact_tags(db: Session, artifact: Artifact, tags_by_name: dict[str, Tag], tag_names: list[str]) -> None:
+    existing_tag_ids = {
+        artifact_tag.tag_id
+        for artifact_tag in db.scalars(
+            select(ArtifactTag).where(ArtifactTag.artifact_id == artifact.id)
+        )
+    }
+
+    for tag_name in tag_names:
+        tag = tags_by_name[tag_name]
+        if tag.id not in existing_tag_ids:
+            db.add(ArtifactTag(artifact=artifact, tag=tag))
+
+
+def seed(db: Session) -> None:
+    seed_data = load_seed_data()
+    get_or_create_user(db)
+
+    tags_by_name = {
+        tag_data["name"]: get_or_create_tag(db, tag_data)
+        for tag_data in seed_data.get("tags", [])
+    }
+
+    seeded_titles = []
+    for artifact_data in seed_data.get("artifacts", []):
+        artifact = upsert_artifact(db, artifact_data)
+        link_artifact_tags(db, artifact, tags_by_name, artifact_data.get("tags", []))
+        seeded_titles.append(artifact.title)
+
     db.commit()
-    print("Seed data created.")
+    print(f"Seeded {len(seeded_titles)} artifacts: {', '.join(seeded_titles)}")
 
 
 def main() -> None:
@@ -186,4 +122,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
