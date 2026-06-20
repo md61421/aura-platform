@@ -17,6 +17,7 @@ Working backend/API slice:
 
 - `GET /api/v1/artifacts`
 - `GET /api/v1/artifacts/{artifact_id}`
+- `POST /api/v1/submissions`
 - `GET /api/v1/tags`
 - `GET /api/v1/health`
 - `GET /api/v1/health/db`
@@ -25,11 +26,11 @@ Working frontend slice:
 
 - artifact browse page
 - artifact detail page
-- API adapter for the current artifact endpoints
+- artifact submission form
+- API adapter for the current backend endpoints
 
 Prototype or local-only frontend pages:
 
-- submission form
 - admin review queue
 - profile page
 - compare page
@@ -122,4 +123,3 @@ The default frontend API URL is:
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
 ```
-

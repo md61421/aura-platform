@@ -118,6 +118,33 @@ const reliabilityVotesFromScore = (score = 0) => ({
     disagreements: score < 0 ? Math.abs(score) : 0,
 });
 
+const isPresent = (value) => value !== undefined && value !== null && value !== "";
+
+const parseApiError = async (response) => {
+    try {
+        const payload = await response.json();
+
+        if (typeof payload.detail === "string") {
+            return payload.detail;
+        }
+
+        if (Array.isArray(payload.detail)) {
+            return payload.detail
+                .map((item) => item.msg || item.message)
+                .filter(Boolean)
+                .join(" ");
+        }
+
+        if (typeof payload.message === "string") {
+            return payload.message;
+        }
+    } catch {
+        // Fall through to the generic status message below.
+    }
+
+    return `AURA API request failed: ${response.status} ${response.statusText}`;
+};
+
 // Backend fields are canonical. The extra display aliases below keep the
 // current prototype components working while the UI is gradually migrated.
 const mapArtifact = (artifact) => {
@@ -175,16 +202,20 @@ const mapArtifact = (artifact) => {
     };
 };
 
-const requestJson = async (path) => {
+const requestJson = async (path, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${path}`, {
-        headers: { Accept: "application/json" },
+        ...options,
+        headers: {
+            Accept: "application/json",
+            ...(options.headers || {}),
+        },
     });
 
     if (response.status === 404) {
         return null;
     }
     if (!response.ok) {
-        throw new Error(`AURA API request failed: ${response.status} ${response.statusText}`);
+        throw new Error(await parseApiError(response));
     }
 
     return response.json();
@@ -198,4 +229,57 @@ export const fetchArtifacts = async () => {
 export const fetchArtifactById = async (id) => {
     const artifact = await requestJson(`/artifacts/${encodeURIComponent(id)}`);
     return artifact ? mapArtifact(artifact) : null;
+};
+
+export const createSubmission = async ({
+    artifactName,
+    contactEmail,
+    modality,
+    category,
+    scanner,
+    sequence,
+    protocol,
+    fieldStrength,
+    symptoms,
+    description,
+    remedies,
+    references,
+    submitterNotes,
+    permissionConfirmed,
+    pseudonymisationConfirmed,
+    files,
+}) => {
+    const formData = new FormData();
+    const fields = {
+        artifact_name: artifactName,
+        contact_email: contactEmail,
+        modality,
+        category,
+        scanner,
+        sequence,
+        protocol,
+        field_strength: fieldStrength,
+        symptoms: JSON.stringify(symptoms || []),
+        description,
+        remedies,
+        references,
+        submitter_notes: submitterNotes,
+        permission_confirmed: permissionConfirmed ? "true" : "false",
+        pseudonymisation_confirmed: pseudonymisationConfirmed ? "true" : "false",
+    };
+
+    Object.entries(fields).forEach(([key, value]) => {
+        if (isPresent(value)) {
+            formData.append(key, value);
+        }
+    });
+
+    files.forEach((file) => {
+        formData.append("files", file);
+    });
+
+    return requestJson("/submissions", {
+        method: "POST",
+        body: formData,
+    });
 };

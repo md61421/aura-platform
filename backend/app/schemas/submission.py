@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.db.models.enums import SubmissionStatus
+from app.db.models.enums import ArtifactStatus, FileType, ImageVisibilityStatus, Modality, SubmissionStatus
 from app.schemas.common import from_attributes
 
 
@@ -24,3 +24,36 @@ class SubmissionRead(SubmissionCreate):
     reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class SubmittedArtifactRead(BaseModel):
+    id: UUID
+    title: str
+    default_modality: Modality
+    status: ArtifactStatus
+    tags: list[str] = Field(default_factory=list)
+
+
+class SubmittedImageRead(BaseModel):
+    id: UUID
+    title: str | None = None
+    modality: Modality
+    vendor: str | None = None
+    sequence: str | None = None
+    protocol: str | None = None
+    field_strength: str | None = None
+    visibility_status: ImageVisibilityStatus
+
+
+class SubmittedFileRead(BaseModel):
+    id: UUID
+    filename: str
+    file_type: FileType
+    file_size_mb: float | None = None
+    checksum: str | None = None
+
+
+class SubmissionReceiptRead(SubmissionRead):
+    artifact: SubmittedArtifactRead
+    image: SubmittedImageRead
+    files: list[SubmittedFileRead] = Field(default_factory=list)
