@@ -87,6 +87,30 @@ const sortFilesForDisplay = (files = []) =>
         return (rank[aKey] ?? 99) - (rank[bKey] ?? 99);
     });
 
+const isDisplayImageFile = (file) => ["jpg", "png"].includes(file.file_type);
+
+const isNiftiFile = (file) => ["nifti", "nii_gz"].includes(file.file_type);
+
+const niftiNameFromUrl = (url, fileType, fallbackIndex) => {
+    const extension = fileType === "nii_gz" ? ".nii.gz" : ".nii";
+    const fallback = `volume-${fallbackIndex + 1}${extension}`;
+
+    try {
+        const { pathname } = new URL(url);
+        const basename = decodeURIComponent(pathname.split("/").filter(Boolean).pop() || "");
+        if (basename.toLowerCase().endsWith(".nii") || basename.toLowerCase().endsWith(".nii.gz")) {
+            return basename;
+        }
+    } catch {
+        const basename = String(url).split("?")[0].split("/").filter(Boolean).pop() || "";
+        if (basename.toLowerCase().endsWith(".nii") || basename.toLowerCase().endsWith(".nii.gz")) {
+            return basename;
+        }
+    }
+
+    return fallback;
+};
+
 const flattenPublicFiles = (images = []) =>
     asArray(images).flatMap((image) =>
         sortFilesForDisplay(asArray(image.files)).map((file) => ({
@@ -153,13 +177,27 @@ const mapArtifact = (artifact) => {
     const images = asArray(artifact.images);
     const image = primaryImage(images);
     const publicFiles = flattenPublicFiles(images);
-    const examples = publicFiles.map((file) => file.public_url).filter(Boolean);
-    const reliabilityScore = image?.reliability_score || 0;
-    const votes = reliabilityVotesFromScore(reliabilityScore);
     const title = firstText(artifact.title, "Untitled artifact");
     const visualDescription = firstText(artifact.visual_description);
     const explanation = firstText(artifact.explanation);
     const defaultModality = firstText(artifact.default_modality, image?.modality, UNKNOWN);
+    const examples = publicFiles
+        .filter(isDisplayImageFile)
+        .map((file) => file.public_url)
+        .filter(Boolean);
+    const niftiVolumes = publicFiles
+        .filter(isNiftiFile)
+        .filter((file) => file.public_url)
+        .map((file, index) => ({
+            id: file.id,
+            name: firstText(file.image_title, title, `Volume ${index + 1}`),
+            niivueName: niftiNameFromUrl(file.public_url, file.file_type, index),
+            url: file.public_url,
+            file_type: file.file_type,
+            relationship_type: file.image_relationship_type,
+        }));
+    const reliabilityScore = image?.reliability_score || 0;
+    const votes = reliabilityVotesFromScore(reliabilityScore);
 
     return {
         id: String(artifact.id),
@@ -174,6 +212,7 @@ const mapArtifact = (artifact) => {
         tags,
         images,
         publicFiles,
+        niftiVolumes,
         created_at: artifact.created_at,
         updated_at: artifact.updated_at,
 
