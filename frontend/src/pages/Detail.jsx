@@ -1,14 +1,17 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { getCategoryStyles } from "../utils/helpers";
 import { fetchArtifactById } from "../services/api";
 import ImageGallery from "../components/ImageGallery";
+
+const NiftiViewer = lazy(() => import("../components/NiftiViewer"));
 
 function Detail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [artifact, setArtifact] = useState(null);
   const [loadedArtifactId, setLoadedArtifactId] = useState(null);
+  const [mediaView, setMediaView] = useState("images");
 
   // Voting states
   const [agreements, setAgreements] = useState(0);
@@ -24,6 +27,10 @@ function Detail() {
         setArtifact(data);
 
         if (data) {
+          setMediaView(
+            data.examples?.length || !data.niftiVolumes?.length ? "images" : "volume",
+          );
+
           const storedVote = localStorage.getItem(`aura_user_vote_${data.id}`);
           const storedAgreements = localStorage.getItem(
             `aura_agreements_${data.id}`,
@@ -76,6 +83,10 @@ function Detail() {
     );
 
   const { badge, placeholder } = getCategoryStyles(artifact?.category);
+  const hasImages = Boolean(artifact.examples?.length);
+  const hasNiftiVolumes = Boolean(artifact.niftiVolumes?.length);
+  const activeMediaView =
+    mediaView === "volume" && hasNiftiVolumes ? "volume" : "images";
 
   // Dynamic calculations for voting
   const reliability = agreements - disagreements;
@@ -158,8 +169,47 @@ function Detail() {
       <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-200 lg:h-[calc(100vh-160px)]">
         <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
           {/* Image Gallery Area */}
-          <div className="p-6 lg:p-8 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col justify-between overflow-hidden">
-            <ImageGallery artifact={artifact} placeholder={placeholder} />
+          <div className="p-6 lg:p-8 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col gap-4 overflow-hidden">
+            {hasNiftiVolumes && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeMediaView === "images"
+                      ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200"
+                      : "text-gray-500 hover:bg-white/70"
+                  }`}
+                  onClick={() => setMediaView("images")}
+                  type="button"
+                >
+                  Images {hasImages ? `(${artifact.examples.length})` : ""}
+                </button>
+                <button
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activeMediaView === "volume"
+                      ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200"
+                      : "text-gray-500 hover:bg-white/70"
+                  }`}
+                  onClick={() => setMediaView("volume")}
+                  type="button"
+                >
+                  NIfTI {artifact.niftiVolumes.length > 1 ? `(${artifact.niftiVolumes.length})` : ""}
+                </button>
+              </div>
+            )}
+
+            {activeMediaView === "volume" ? (
+              <Suspense
+                fallback={
+                  <div className="flex min-h-[28rem] items-center justify-center rounded-2xl bg-slate-950 text-sm font-medium text-slate-300">
+                    Loading NIfTI viewer...
+                  </div>
+                }
+              >
+                <NiftiViewer title={artifact.name} volumes={artifact.niftiVolumes} />
+              </Suspense>
+            ) : (
+              <ImageGallery artifact={artifact} placeholder={placeholder} />
+            )}
           </div>
 
           {/* Content Area */}
@@ -249,6 +299,64 @@ function Detail() {
                   </span>
                 ))}
               </div>
+            </div>
+
+            <div className="mb-8 rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-900">
+                    Community Validation
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {isVerified
+                      ? "Verified consensus"
+                      : isFlagged
+                        ? "Needs reviewer attention"
+                        : "Open for community review"}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2 text-right shadow-sm ring-1 ring-gray-100">
+                  <div className="text-lg font-bold text-gray-900">
+                    {reliability > 0 ? `+${reliability}` : reliability}
+                  </div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    {consensusPercentage}% agree
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  onClick={() => handleVote("agree")}
+                  className={`flex-1 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                    userVote === "agree"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-emerald-200 hover:text-emerald-700"
+                  }`}
+                  type="button"
+                >
+                  <i className="fas fa-thumbs-up mr-2"></i>
+                  Agree ({agreements})
+                </button>
+                <button
+                  onClick={() => handleVote("disagree")}
+                  className={`flex-1 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                    userVote === "disagree"
+                      ? "border-rose-300 bg-rose-50 text-rose-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-rose-200 hover:text-rose-700"
+                  }`}
+                  type="button"
+                >
+                  <i className="fas fa-thumbs-down mr-2"></i>
+                  Disagree ({disagreements})
+                </button>
+              </div>
+
+              {voteFeedback && (
+                <p className="mt-3 text-xs font-semibold text-brand-600">
+                  {voteFeedback}
+                </p>
+              )}
             </div>
 
             <div className="mb-8">
