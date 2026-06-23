@@ -2,7 +2,6 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { lazy, Suspense, useState, useEffect } from "react";
 import { getCategoryStyles } from "../utils/helpers";
 import { fetchArtifactById } from "../services/api";
-import ImageGallery from "../components/ImageGallery";
 
 const NiftiViewer = lazy(() => import("../components/NiftiViewer"));
 
@@ -11,12 +10,11 @@ function Detail() {
   const navigate = useNavigate();
   const [artifact, setArtifact] = useState(null);
   const [loadedArtifactId, setLoadedArtifactId] = useState(null);
-  const [mediaView, setMediaView] = useState("images");
 
   // Voting states
   const [agreements, setAgreements] = useState(0);
   const [disagreements, setDisagreements] = useState(0);
-  const [userVote, setUserVote] = useState(null); // 'agree', 'disagree', or null
+  const [userVote, setUserVote] = useState(null);
   const [voteFeedback, setVoteFeedback] = useState(null);
 
   useEffect(() => {
@@ -27,10 +25,6 @@ function Detail() {
         setArtifact(data);
 
         if (data) {
-          setMediaView(
-            data.examples?.length || !data.niftiVolumes?.length ? "images" : "volume",
-          );
-
           const storedVote = localStorage.getItem(`aura_user_vote_${data.id}`);
           const storedAgreements = localStorage.getItem(
             `aura_agreements_${data.id}`,
@@ -68,7 +62,12 @@ function Detail() {
 
   if (isLoading) {
     return (
-      <div className="text-center py-20 text-gray-500">Loading details...</div>
+      <div className="text-center py-20 text-gray-500 animate-fade-in">
+        <div className="inline-flex items-center gap-3">
+          <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-brand-500 animate-spin"></div>
+          <span className="text-sm font-medium">Loading details…</span>
+        </div>
+      </div>
     );
   }
 
@@ -83,18 +82,14 @@ function Detail() {
     );
 
   const { badge, placeholder } = getCategoryStyles(artifact?.category);
-  const hasImages = Boolean(artifact.examples?.length);
-  const hasNiftiVolumes = Boolean(artifact.niftiVolumes?.length);
-  const activeMediaView =
-    mediaView === "volume" && hasNiftiVolumes ? "volume" : "images";
 
-  // Dynamic calculations for voting
+  // Vote summary
   const reliability = agreements - disagreements;
   const totalVotes = agreements + disagreements;
   const consensusPercentage =
     totalVotes > 0 ? Math.round((agreements / totalVotes) * 100) : 100;
 
-  // High-fidelity validation status
+  /* Validation status */
   const isVerified =
     (artifact.status === "OSIPI Verified" && reliability >= 0) ||
     reliability >= 15;
@@ -111,7 +106,7 @@ function Detail() {
     let newDisagreements = disagreements;
 
     if (userVote === voteType) {
-      // User is undoing their existing vote
+      /* Undo vote */
       newVote = null;
       if (voteType === "agree") {
         newAgreements = Math.max(0, agreements - 1);
@@ -119,7 +114,7 @@ function Detail() {
         newDisagreements = Math.max(0, disagreements - 1);
       }
     } else {
-      // User is casting a new vote or changing their existing vote
+      /* Add or change vote */
       if (userVote === "agree") {
         newAgreements = Math.max(0, agreements - 1);
       } else if (userVote === "disagree") {
@@ -134,12 +129,12 @@ function Detail() {
       }
     }
 
-    // Save states locally
+    /* Update local state */
     setUserVote(newVote);
     setAgreements(newAgreements);
     setDisagreements(newDisagreements);
 
-    // Save to localStorage to persist user vote simulation
+    /* Save vote */
     if (newVote === null) {
       localStorage.removeItem(`aura_user_vote_${artifact.id}`);
     } else {
@@ -148,7 +143,7 @@ function Detail() {
     localStorage.setItem(`aura_agreements_${artifact.id}`, newAgreements);
     localStorage.setItem(`aura_disagreements_${artifact.id}`, newDisagreements);
 
-    // Trigger visual message feedback
+    /* Show feedback */
     setVoteFeedback(
       voteType === newVote
         ? `Vote Registered: ${voteType === "agree" ? "Agree" : "Disagree"}`
@@ -161,58 +156,27 @@ function Detail() {
     <div className="animate-fade-in">
       <button
         onClick={() => navigate("/")}
-        className="mb-6 inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+        className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-gray-900 transition-all duration-200 group cursor-pointer"
       >
-        <i className="fas fa-arrow-left mr-2"></i> Back to Browse
+        <i className="fas fa-arrow-left text-[11px] transition-transform duration-200 group-hover:-translate-x-0.5"></i>
+        Back to Browse
       </button>
 
       <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-200 lg:h-[calc(100vh-160px)]">
-        <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
-          {/* Image Gallery Area */}
-          <div className="p-6 lg:p-8 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col gap-4 overflow-hidden">
-            {hasNiftiVolumes && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    activeMediaView === "images"
-                      ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200"
-                      : "text-gray-500 hover:bg-white/70"
-                  }`}
-                  onClick={() => setMediaView("images")}
-                  type="button"
-                >
-                  Images {hasImages ? `(${artifact.examples.length})` : ""}
-                </button>
-                <button
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    activeMediaView === "volume"
-                      ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200"
-                      : "text-gray-500 hover:bg-white/70"
-                  }`}
-                  onClick={() => setMediaView("volume")}
-                  type="button"
-                >
-                  NIfTI {artifact.niftiVolumes.length > 1 ? `(${artifact.niftiVolumes.length})` : ""}
-                </button>
-              </div>
-            )}
-
-            {activeMediaView === "volume" ? (
-              <Suspense
-                fallback={
-                  <div className="flex min-h-[28rem] items-center justify-center rounded-2xl bg-slate-950 text-sm font-medium text-slate-300">
-                    Loading NIfTI viewer...
-                  </div>
-                }
-              >
-                <NiftiViewer title={artifact.name} volumes={artifact.niftiVolumes} />
-              </Suspense>
-            ) : (
-              <ImageGallery artifact={artifact} placeholder={placeholder} />
-            )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 h-full animate-fade-in">
+          <div className="bg-[#020612] border-b lg:border-b-0 lg:border-r border-slate-800/40 flex flex-col overflow-hidden h-full relative">
+            <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-slate-700/30 to-transparent pointer-events-none hidden lg:block"></div>
+            <Suspense
+              fallback={
+                <div className="flex-grow h-full flex items-center justify-center bg-slate-950 text-sm font-medium text-slate-400">
+                  <i className="fas fa-spinner fa-spin mr-2"></i> Loading Workstation...
+                </div>
+              }
+            >
+              <NiftiViewer artifact={artifact} placeholder={placeholder} />
+            </Suspense>
           </div>
 
-          {/* Content Area */}
           <div className="p-6 lg:p-8 flex flex-col lg:overflow-y-auto w-full">
             <div className="flex justify-between items-start mb-4">
               <div>

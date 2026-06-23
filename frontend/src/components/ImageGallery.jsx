@@ -10,8 +10,8 @@ function ImageGallery({ artifact, placeholder }) {
   const activeImage = examples[activeImg] || examples[0];
 
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-800 flex items-center justify-center shadow-inner mb-4">
+    <div className="flex-1 flex flex-col h-full">
+      <div className="relative w-full flex-1 rounded-2xl overflow-hidden bg-slate-800 flex items-center justify-center shadow-inner mb-4">
         {!activeImage && (
           <div className="flex flex-col items-center justify-center text-slate-500">
             {placeholder}
