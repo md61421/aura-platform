@@ -147,7 +147,7 @@ def _storage_provider() -> StorageProvider:
 
 
 def _public_url_for_upload(request: Request, storage_key: str, file_type: FileType) -> str | None:
-    if file_type not in {FileType.JPG, FileType.PNG}:
+    if file_type not in {FileType.JPG, FileType.PNG, FileType.NIFTI, FileType.NII_GZ}:
         return None
     return str(request.url_for("local_upload", path=storage_key))
 
