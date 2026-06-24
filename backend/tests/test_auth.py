@@ -48,13 +48,25 @@ def bearer(token: str) -> HTTPAuthorizationCredentials:
 
 
 class FakeUserSyncSession:
-    def __init__(self, user: User | None = None):
+    def __init__(
+        self,
+        user: User | None = None,
+        *,
+        supabase_user: User | None = None,
+        email_user: User | None = None,
+    ):
         self.user = user
+        self.supabase_user = supabase_user
+        self.email_user = email_user
         self.added = []
         self.commits = 0
         self.flushes = 0
+        self.scalar_calls = 0
 
     def scalar(self, statement):
+        self.scalar_calls += 1
+        if self.supabase_user is not None or self.email_user is not None:
+            return self.supabase_user if self.scalar_calls == 1 else self.email_user
         return self.user
 
     def add(self, obj):
@@ -182,7 +194,7 @@ def test_dependencies_verify_bearer_credentials(monkeypatch):
 
 def test_sync_supabase_user_creates_contributor():
     claims = make_claims(
-        email="new@example.org",
+        email="New@Example.ORG",
         user_metadata={"name": "New Researcher"},
     )
     db = FakeUserSyncSession()
@@ -219,6 +231,32 @@ def test_sync_supabase_user_updates_existing_profile_without_changing_role():
     assert user is existing
     assert user.email == "fresh@example.org"
     assert user.name == "Fresh Name"
+    assert user.role == UserRole.REVIEWER
+    assert db.added == []
+    assert db.commits == 1
+
+
+def test_sync_supabase_user_links_existing_email_user_without_changing_role():
+    existing = User(
+        supabase_user_id=None,
+        email="reviewer@example.org",
+        name="Existing Reviewer",
+        role=UserRole.REVIEWER,
+        is_active=True,
+    )
+    claims = make_claims(
+        sub="supabase-reviewer-id",
+        email="Reviewer@Example.ORG",
+        user_metadata={"name": "Supabase Reviewer"},
+    )
+    db = FakeUserSyncSession(supabase_user=None, email_user=existing)
+
+    user = sync_supabase_user(db, claims)
+
+    assert user is existing
+    assert user.supabase_user_id == "supabase-reviewer-id"
+    assert user.email == "reviewer@example.org"
+    assert user.name == "Supabase Reviewer"
     assert user.role == UserRole.REVIEWER
     assert db.added == []
     assert db.commits == 1

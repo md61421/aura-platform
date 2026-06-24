@@ -51,11 +51,18 @@ def sync_supabase_user(db: Session, claims: SupabaseJWTClaims) -> User:
     user = db.scalar(select(User).where(User.supabase_user_id == claims.sub))
     name = _claim_name(claims)
 
+    if not user and claims.email:
+        user = db.scalar(select(User).where(User.email == claims.email.lower()))
+
     if user:
         changed = False
+        if user.supabase_user_id != claims.sub:
+            changed = True
+            user.supabase_user_id = claims.sub
         if claims.email:
-            changed = changed or user.email != claims.email
-            user.email = claims.email
+            email = claims.email.lower()
+            changed = changed or user.email != email
+            user.email = email
         if name:
             changed = changed or user.name != name
             user.name = name
@@ -65,7 +72,7 @@ def sync_supabase_user(db: Session, claims: SupabaseJWTClaims) -> User:
 
     user = User(
         supabase_user_id=claims.sub,
-        email=claims.email,
+        email=claims.email.lower() if claims.email else None,
         name=name,
         role=UserRole.CONTRIBUTOR,
         is_active=True,
