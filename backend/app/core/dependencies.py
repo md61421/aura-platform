@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import SupabaseJWTClaims, auth_exception, verify_supabase_jwt
-from app.core.exceptions import not_implemented_exception
+from app.core.exceptions import forbidden_exception
 from app.db.models import User
 from app.db.models.enums import UserRole
 from app.db.session import get_db
@@ -85,6 +85,39 @@ def get_current_user_optional(
     return sync_supabase_user(db, claims)
 
 
-def require_admin():
-    # Admin authorization will be added in a later chunk.
-    raise not_implemented_exception("Admin authentication")
+def require_user(
+    current_user: Annotated[User | None, Depends(get_current_user_optional)],
+) -> User:
+    if current_user is None:
+        raise auth_exception("Missing bearer token")
+    if not current_user.is_active:
+        raise forbidden_exception("User account is inactive")
+    return current_user
+
+
+def require_contributor(
+    current_user: Annotated[User, Depends(require_user)],
+) -> User:
+    if current_user.role not in {
+        UserRole.CONTRIBUTOR,
+        UserRole.REVIEWER,
+        UserRole.ADMIN,
+    }:
+        raise forbidden_exception("Contributor access required")
+    return current_user
+
+
+def require_reviewer(
+    current_user: Annotated[User, Depends(require_user)],
+) -> User:
+    if current_user.role not in {UserRole.REVIEWER, UserRole.ADMIN}:
+        raise forbidden_exception("Reviewer access required")
+    return current_user
+
+
+def require_admin(
+    current_user: Annotated[User, Depends(require_user)],
+) -> User:
+    if current_user.role != UserRole.ADMIN:
+        raise forbidden_exception("Admin access required")
+    return current_user
