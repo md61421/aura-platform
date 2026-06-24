@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     APPROVED_STORAGE_BUCKET: str = "aura-approved-artifacts"
     LOCAL_STORAGE_ROOT: str = "uploads"
     DEV_AUTO_APPROVE_SUBMISSIONS: bool = True
+    SUPABASE_URL: str | None = None
+    SUPABASE_PROJECT_REF: str | None = None
+    SUPABASE_JWT_SECRET: str | None = None
+    SUPABASE_JWT_AUDIENCE: str = "authenticated"
+    SUPABASE_JWT_ISSUER: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
