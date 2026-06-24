@@ -8,7 +8,14 @@ from jose import jwt
 
 from app.core.auth import SUPABASE_JWT_ALGORITHM, verify_supabase_jwt
 from app.core.config import settings
-from app.core.dependencies import get_supabase_claims_optional, require_supabase_claims
+from app.core.dependencies import (
+    get_current_user_optional,
+    get_supabase_claims_optional,
+    require_supabase_claims,
+    sync_supabase_user,
+)
+from app.db.models import User
+from app.db.models.enums import UserRole
 
 TEST_SECRET = "test-supabase-jwt-secret"
 TEST_AUDIENCE = "authenticated"
@@ -32,6 +39,37 @@ def make_token(**overrides):
 
 def bearer(token: str) -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+class FakeUserSyncSession:
+    def __init__(self, user: User | None = None):
+        self.user = user
+        self.added = []
+        self.commits = 0
+        self.flushes = 0
+
+    def scalar(self, statement):
+        return self.user
+
+    def add(self, obj):
+        self.added.append(obj)
+        self.user = obj
+
+    def flush(self):
+        self.flushes += 1
+
+    def commit(self):
+        self.commits += 1
+
+
+def make_claims(**overrides):
+    token, _ = make_token(**overrides)
+    return verify_supabase_jwt(
+        token,
+        jwt_secret=TEST_SECRET,
+        audience=TEST_AUDIENCE,
+        issuer=TEST_ISSUER,
+    )
 
 
 def test_verify_supabase_jwt_accepts_valid_token():
@@ -125,3 +163,83 @@ def test_dependencies_verify_bearer_credentials(monkeypatch):
     claims = require_supabase_claims(bearer(token))
 
     assert claims.sub == payload["sub"]
+
+
+def test_sync_supabase_user_creates_contributor():
+    claims = make_claims(
+        email="new@example.org",
+        user_metadata={"name": "New Researcher"},
+    )
+    db = FakeUserSyncSession()
+
+    user = sync_supabase_user(db, claims)
+
+    assert user.supabase_user_id == claims.sub
+    assert user.email == "new@example.org"
+    assert user.name == "New Researcher"
+    assert user.role == UserRole.CONTRIBUTOR
+    assert user.is_active is True
+    assert db.added == [user]
+    assert db.flushes == 1
+    assert db.commits == 1
+
+
+def test_sync_supabase_user_updates_existing_profile_without_changing_role():
+    existing = User(
+        supabase_user_id="existing-sub",
+        email="old@example.org",
+        name="Old Name",
+        role=UserRole.REVIEWER,
+        is_active=True,
+    )
+    claims = make_claims(
+        sub="existing-sub",
+        email="fresh@example.org",
+        user_metadata={"full_name": "Fresh Name"},
+    )
+    db = FakeUserSyncSession(existing)
+
+    user = sync_supabase_user(db, claims)
+
+    assert user is existing
+    assert user.email == "fresh@example.org"
+    assert user.name == "Fresh Name"
+    assert user.role == UserRole.REVIEWER
+    assert db.added == []
+    assert db.commits == 1
+
+
+def test_sync_supabase_user_does_not_commit_unchanged_existing_user():
+    existing = User(
+        supabase_user_id="existing-sub",
+        email="same@example.org",
+        name="Same Name",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    claims = make_claims(
+        sub="existing-sub",
+        email="same@example.org",
+        user_metadata={"display_name": "Same Name"},
+    )
+    db = FakeUserSyncSession(existing)
+
+    user = sync_supabase_user(db, claims)
+
+    assert user is existing
+    assert user.role == UserRole.ADMIN
+    assert db.commits == 0
+
+
+def test_get_current_user_optional_syncs_when_claims_exist():
+    claims = make_claims()
+    db = FakeUserSyncSession()
+
+    user = get_current_user_optional(claims=claims, db=db)
+
+    assert user.supabase_user_id == claims.sub
+    assert db.commits == 1
+
+
+def test_get_current_user_optional_returns_none_without_claims():
+    assert get_current_user_optional(claims=None, db=FakeUserSyncSession()) is None
