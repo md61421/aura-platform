@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import get_db_session
 from app.core.exceptions import not_found_exception
+from app.core.workflow import PUBLIC_ARTIFACT_STATUSES
 from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Tag
 from app.db.models.enums import ArtifactStatus, ImageVisibilityStatus, Modality
 from app.schemas.artifact import (
@@ -16,12 +17,6 @@ from app.schemas.artifact import (
 )
 
 router = APIRouter()
-
-PUBLIC_ARTIFACT_STATUSES = (
-    ArtifactStatus.COMMUNITY_PUBLISHED,
-    ArtifactStatus.OSIPI_VERIFIED,
-    ArtifactStatus.APPROVED,
-)
 
 
 def _artifact_options():
