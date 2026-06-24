@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, String
+from sqlalchemy import Boolean, Enum, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,18 @@ class User(TimestampMixin, Base):
     )
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    supabase_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
+    )
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, values_callable=enum_values, name="user_role_enum"),
         default=UserRole.PUBLIC_USER,
@@ -36,4 +48,3 @@ class User(TimestampMixin, Base):
     votes: Mapped[list["Vote"]] = relationship(back_populates="user")
     comments: Mapped[list["Comment"]] = relationship(back_populates="user")
     review_actions: Mapped[list["ReviewAction"]] = relationship(back_populates="reviewer")
-

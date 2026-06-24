@@ -10,6 +10,8 @@ from app.schemas.common import from_attributes
 class UserCreate(BaseModel):
     name: str | None = None
     email: str | None = None
+    supabase_user_id: str | None = None
+    is_active: bool = True
     role: UserRole = UserRole.PUBLIC_USER
 
 
