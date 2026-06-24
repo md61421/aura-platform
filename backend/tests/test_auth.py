@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 
+from app.api.v1.auth import read_current_user
+from app.api.v1.router import api_router
 from app.core.auth import SUPABASE_JWT_ALGORITHM, verify_supabase_jwt
 from app.core.config import settings
 from app.core.dependencies import (
@@ -326,3 +328,15 @@ def test_require_admin_rejects_non_admin(role):
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Admin access required"
+
+
+def test_read_current_user_returns_authenticated_user():
+    user = make_user()
+
+    assert read_current_user(user) is user
+
+
+def test_auth_me_route_is_registered():
+    paths = {route.path for route in api_router.routes}
+
+    assert "/auth/me" in paths
