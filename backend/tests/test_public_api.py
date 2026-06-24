@@ -8,7 +8,7 @@ from fastapi import HTTPException, UploadFile
 
 from app.api.v1 import artifacts, health, submissions, tags
 from app.core.config import settings
-from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Tag
+from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag, User
 from app.db.models.enums import (
     ArtifactStatus,
     FileRole,
@@ -128,6 +128,7 @@ def valid_submission_kwargs(**overrides):
         "remedies": None,
         "references": None,
         "submitter_notes": None,
+        "current_user": None,
         "db": FakeWriteSession(),
     }
     values.update(overrides)
@@ -276,6 +277,24 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
     assert payload["files"][0]["file_type"].value == "png"
     assert db.committed is True
     assert list(Path(tmp_path).glob("submissions/*/*-example.png"))
+
+
+def test_create_submission_attaches_logged_in_user(monkeypatch):
+    db = FakeWriteSession()
+    current_user = User(id=uuid4(), email="researcher@example.org")
+    monkeypatch.setattr(settings, "DEV_AUTO_APPROVE_SUBMISSIONS", False)
+
+    response = submissions.create_submission(
+        **valid_submission_kwargs(
+            db=db,
+            current_user=current_user,
+            files=None,
+        )
+    )
+
+    assert response["submitted_by_id"] == current_user.id
+    submission = next(obj for obj in db.objects if isinstance(obj, Submission))
+    assert submission.submitted_by_id == current_user.id
 
 
 @pytest.mark.parametrize(

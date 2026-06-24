@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.dependencies import get_db_session
-from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag
+from app.core.dependencies import get_current_user_optional, get_db_session
+from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag, User
 from app.db.models.enums import (
     ArtifactStatus,
     FileRole,
@@ -233,6 +233,7 @@ def create_submission(
     remedies: Annotated[str | None, Form()] = None,
     references: Annotated[str | None, Form()] = None,
     submitter_notes: Annotated[str | None, Form()] = None,
+    current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
     db: Session = Depends(get_db_session),
 ):
     email = contact_email.strip().lower()
@@ -271,6 +272,7 @@ def create_submission(
     stored_file_rows: list[tuple[ImageFile, str]] = []
 
     submission = Submission(
+        submitted_by_id=current_user.id if current_user else None,
         contact_email=email,
         status=SubmissionStatus.APPROVED if auto_approve else SubmissionStatus.PENDING_REVIEW,
         permission_confirmed=permission_confirmed,
