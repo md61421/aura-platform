@@ -266,7 +266,7 @@ def create_submission(
     ]
     remedy_payload = _remedies_from_text(remedies)
     reference_lines = _parse_lines(references)
-    auto_approve = settings.DEV_AUTO_APPROVE_SUBMISSIONS
+    publish_immediately = True
 
     saved_paths: list[Path] = []
     stored_file_rows: list[tuple[ImageFile, str]] = []
@@ -274,7 +274,7 @@ def create_submission(
     submission = Submission(
         submitted_by_id=current_user.id if current_user else None,
         contact_email=email,
-        status=SubmissionStatus.APPROVED if auto_approve else SubmissionStatus.PENDING_REVIEW,
+        status=SubmissionStatus.APPROVED if publish_immediately else SubmissionStatus.PENDING_REVIEW,
         permission_confirmed=permission_confirmed,
         pseudonymisation_confirmed=pseudonymisation_confirmed,
         submitter_notes=json.dumps(
@@ -294,7 +294,11 @@ def create_submission(
         visual_description=description.strip(),
         remedies=remedy_payload,
         default_modality=modality,
-        status=ArtifactStatus.APPROVED if auto_approve else ArtifactStatus.DRAFT,
+        status=(
+            ArtifactStatus.COMMUNITY_PUBLISHED
+            if publish_immediately
+            else ArtifactStatus.DRAFT
+        ),
     )
     image = Image(
         submission=submission,
@@ -307,7 +311,7 @@ def create_submission(
         field_strength=_clean_text(field_strength),
         visibility_status=(
             ImageVisibilityStatus.APPROVED_PUBLIC
-            if auto_approve
+            if publish_immediately
             else ImageVisibilityStatus.PENDING_REVIEW
         ),
     )
@@ -345,7 +349,7 @@ def create_submission(
             saved_paths.append(saved_path)
             public_url = (
                 _public_url_for_upload(request, storage_key, file_type)
-                if auto_approve
+                if publish_immediately
                 else None
             )
 

@@ -128,8 +128,17 @@ const primaryImage = (images = []) =>
     null;
 
 const statusLabel = (status) => {
-    if (status === "approved") {
+    if (status === "osipi_verified" || status === "approved") {
         return "OSIPI Verified";
+    }
+    if (status === "community_published") {
+        return "Community Published";
+    }
+    if (status === "flagged") {
+        return "Flagged";
+    }
+    if (status === "rejected") {
+        return "Rejected";
     }
     if (status === "archived") {
         return "Archived";

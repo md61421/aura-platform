@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Text, cast, func, or_, select
+from sqlalchemy import Text, cast, false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import get_db_session
@@ -16,6 +16,12 @@ from app.schemas.artifact import (
 )
 
 router = APIRouter()
+
+PUBLIC_ARTIFACT_STATUSES = (
+    ArtifactStatus.COMMUNITY_PUBLISHED,
+    ArtifactStatus.OSIPI_VERIFIED,
+    ArtifactStatus.APPROVED,
+)
 
 
 def _artifact_options():
@@ -103,13 +109,17 @@ def list_artifacts(
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
     modality: Modality | None = Query(default=None),
-    status: ArtifactStatus = Query(default=ArtifactStatus.APPROVED),
+    status: ArtifactStatus | None = Query(default=None),
     tag: str | None = Query(default=None),
 ):
     statement = select(Artifact).options(*_artifact_options())
 
     if status:
-        statement = statement.where(Artifact.status == status)
+        statement = statement.where(
+            Artifact.status == status if status in PUBLIC_ARTIFACT_STATUSES else false()
+        )
+    else:
+        statement = statement.where(Artifact.status.in_(PUBLIC_ARTIFACT_STATUSES))
     if modality:
         statement = statement.where(Artifact.default_modality == modality)
     if tag:
@@ -142,6 +152,7 @@ def get_artifact(
     statement = (
         select(Artifact)
         .where(Artifact.id == artifact_id)
+        .where(Artifact.status.in_(PUBLIC_ARTIFACT_STATUSES))
         .options(*_artifact_options())
     )
     artifact = db.scalar(statement)

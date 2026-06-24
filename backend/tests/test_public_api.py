@@ -272,6 +272,7 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
     assert payload["contact_email"] == "researcher@example.org"
     assert payload["status"].value == "approved"
     assert payload["artifact"]["title"] == "Community artifact"
+    assert payload["artifact"]["status"].value == "community_published"
     assert payload["artifact"]["tags"] == ["Motion", "ghosting"]
     assert payload["image"]["visibility_status"].value == "approved_public"
     assert payload["files"][0]["file_type"].value == "png"
