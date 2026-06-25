@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getSupabaseClient, isSupabaseConfigured, supabase } from "../lib/supabase";
+import { fetchCurrentUser } from "../services/api";
 import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
+  const [auraUser, setAuraUser] = useState(null);
+  const [auraUserError, setAuraUserError] = useState("");
   const [loading, setLoading] = useState(isSupabaseConfigured);
 
   useEffect(() => {
@@ -35,6 +38,10 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (!nextSession) {
+        setAuraUser(null);
+        setAuraUserError("");
+      }
       setLoading(false);
     });
 
@@ -44,9 +51,37 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session?.access_token) {
+      return undefined;
+    }
+
+    let active = true;
+
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (active) {
+          setAuraUser(currentUser);
+          setAuraUserError("");
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setAuraUser(null);
+          setAuraUserError(error.message || "Failed to sync AURA user.");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session?.access_token]);
+
   const value = useMemo(
     () => ({
       accessToken: session?.access_token ?? null,
+      auraUser,
+      auraUserError,
       isAuthenticated: Boolean(session?.user),
       isSupabaseConfigured,
       loading,
@@ -74,7 +109,7 @@ export function AuthProvider({ children }) {
       },
       user: session?.user ?? null,
     }),
-    [loading, session],
+    [auraUser, auraUserError, loading, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
