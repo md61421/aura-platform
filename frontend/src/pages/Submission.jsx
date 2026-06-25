@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 import { createSubmission } from "../services/api";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -95,6 +96,7 @@ const validateSubmission = (form) => {
 };
 
 function Submission() {
+  const { isAuthenticated, isSupabaseConfigured, loading: authLoading } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [files, setFiles] = useState([]);
@@ -196,6 +198,19 @@ function Submission() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (authLoading) {
+      setFormError("Checking your sign-in status. Try again in a moment.");
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      setFormError("Sign-in is not configured for this environment.");
+      return;
+    }
+    if (!isAuthenticated) {
+      setFormError("Sign in before submitting an artifact.");
+      return;
+    }
+
     const symptomsForSubmit = normaliseTags([...form.symptoms, tagInput]);
     const payload = { ...form, symptoms: symptomsForSubmit };
     const validationError = validateSubmission(payload);
@@ -231,7 +246,7 @@ function Submission() {
             <i className="fas fa-check text-3xl text-green-600"></i>
         </div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Submission Received!</h3>
-        <p className="text-gray-500 max-w-sm mx-auto mb-8">Your artifact has been sent to the reviewer queue. You'll be notified once it's approved and published.</p>
+        <p className="text-gray-500 max-w-sm mx-auto mb-8">Your artifact is published to the community and linked to your account.</p>
         <p className="text-xs text-gray-400 max-w-sm mx-auto mb-8">Receipt ID: {receipt.id}</p>
         <div className="flex flex-col sm:flex-row justify-center gap-3">
           <button onClick={resetForm} className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-8 rounded-xl transition-colors shadow-lg shadow-brand-500/30" type="button">
@@ -256,6 +271,12 @@ function Submission() {
         {formError && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {formError}
+          </div>
+        )}
+
+        {!authLoading && !isAuthenticated && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+            Sign in before submitting an artifact.
           </div>
         )}
 
@@ -557,10 +578,10 @@ function Submission() {
             </Link>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || authLoading || !isAuthenticated}
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-6 rounded-xl ml-3 shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {submitting ? "Submitting..." : "Submit for Review"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
+              {submitting ? "Submitting..." : "Publish Artifact"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
                     </button>
                 </div>
             </form>

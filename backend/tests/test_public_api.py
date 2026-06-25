@@ -17,6 +17,7 @@ from app.db.models.enums import (
     ImageVisibilityStatus,
     Modality,
     StorageProvider,
+    UserRole,
 )
 
 
@@ -109,6 +110,15 @@ def make_upload(filename="example.png", content=b"not-a-real-png"):
     return UploadFile(file=BytesIO(content), filename=filename)
 
 
+def make_user(role=UserRole.CONTRIBUTOR):
+    return User(
+        id=uuid4(),
+        email="researcher@example.org",
+        role=role,
+        is_active=True,
+    )
+
+
 def valid_submission_kwargs(**overrides):
     values = {
         "request": FakeRequest(),
@@ -128,7 +138,7 @@ def valid_submission_kwargs(**overrides):
         "remedies": None,
         "references": None,
         "submitter_notes": None,
-        "current_user": None,
+        "current_user": make_user(),
         "db": FakeWriteSession(),
     }
     values.update(overrides)
@@ -270,6 +280,7 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
 
     payload = response
     assert payload["contact_email"] == "researcher@example.org"
+    assert payload["submitted_by_id"] is not None
     assert payload["status"].value == "approved"
     assert payload["artifact"]["title"] == "Community artifact"
     assert payload["artifact"]["status"].value == "community_published"
@@ -282,7 +293,7 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
 
 def test_create_submission_attaches_logged_in_user(monkeypatch):
     db = FakeWriteSession()
-    current_user = User(id=uuid4(), email="researcher@example.org")
+    current_user = make_user()
     monkeypatch.setattr(settings, "DEV_AUTO_APPROVE_SUBMISSIONS", False)
 
     response = submissions.create_submission(
@@ -296,6 +307,17 @@ def test_create_submission_attaches_logged_in_user(monkeypatch):
     assert response["submitted_by_id"] == current_user.id
     submission = next(obj for obj in db.objects if isinstance(obj, Submission))
     assert submission.submitted_by_id == current_user.id
+
+
+def test_submission_route_requires_authenticated_contributor():
+    route = next(route for route in submissions.router.routes if route.path == "")
+    dependency_names = {
+        dependency.call.__name__
+        for dependency in route.dependant.dependencies
+        if dependency.call
+    }
+
+    assert "require_contributor" in dependency_names
 
 
 @pytest.mark.parametrize(
