@@ -96,7 +96,13 @@ const validateSubmission = (form) => {
 };
 
 function Submission() {
-  const { isAuthenticated, isSupabaseConfigured, loading: authLoading } = useAuth();
+  const {
+    isAuthenticated,
+    isSupabaseConfigured,
+    loading: authLoading,
+    signInWithEmail,
+    user,
+  } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [files, setFiles] = useState([]);
@@ -105,6 +111,10 @@ function Submission() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInBusy, setSignInBusy] = useState(false);
+  const [signInError, setSignInError] = useState("");
+  const [signInNotice, setSignInNotice] = useState("");
 
   const updateField = (event) => {
     const { checked, name, type, value } = event.target;
@@ -196,6 +206,22 @@ function Submission() {
     addFiles(event.dataTransfer.files);
   };
 
+  const handleSignIn = async (event) => {
+    event.preventDefault();
+    setSignInBusy(true);
+    setSignInError("");
+    setSignInNotice("");
+
+    try {
+      await signInWithEmail(signInEmail.trim());
+      setSignInNotice("Magic link sent. Check your email, then return here.");
+    } catch (error) {
+      setSignInError(error.message || "Sign-in failed.");
+    } finally {
+      setSignInBusy(false);
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (authLoading) {
@@ -239,6 +265,80 @@ function Submission() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="animate-fade-in max-w-4xl mx-auto">
+        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto mb-4 h-8 w-8 rounded-full border-2 border-gray-200 border-t-brand-500 animate-spin"></div>
+          <h1 className="text-xl font-bold text-gray-900">Checking sign-in status</h1>
+          <p className="mt-2 text-sm text-gray-500">Preparing the submission workspace.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="animate-fade-in max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Submit an Artifact</h1>
+          <p className="mt-2 text-gray-500">Sign in to publish an artifact from your AURA account.</p>
+        </div>
+
+        <div className="mx-auto max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="text-lg font-bold text-gray-900">Sign in required</h2>
+            <p className="mt-1 text-sm text-gray-500">Only authenticated contributors can submit artifacts.</p>
+          </div>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+              Sign-in is not configured for this environment.
+            </div>
+          )}
+
+          {signInError && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+              {signInError}
+            </div>
+          )}
+
+          {signInNotice && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
+              {signInNotice}
+            </div>
+          )}
+
+          <form className="space-y-4" onSubmit={handleSignIn}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700" htmlFor="submit-signin-email">
+                Email
+              </label>
+              <input
+                autoComplete="email"
+                className={fieldClass}
+                id="submit-signin-email"
+                name="email"
+                onChange={(event) => setSignInEmail(event.target.value)}
+                required
+                type="email"
+                value={signInEmail}
+              />
+            </div>
+
+            <button
+              className="w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={signInBusy || !isSupabaseConfigured}
+              type="submit"
+            >
+              {signInBusy ? "Sending..." : "Send magic link"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (receipt) {
     return (
       <div id="submit-success" className="py-12 text-center animate-fade-in max-w-4xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm">
@@ -264,19 +364,13 @@ function Submission() {
     <div className="animate-fade-in max-w-4xl mx-auto">
         <div className="text-center mb-10">
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Submit an Artifact</h1>
-            <p className="mt-2 text-gray-500">Help grow the repository by submitting artifact examples for review.</p>
+            <p className="mt-2 text-gray-500">Publishing as {user?.email || "your AURA account"}.</p>
         </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
         {formError && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {formError}
-          </div>
-        )}
-
-        {!authLoading && !isAuthenticated && (
-          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
-            Sign in before submitting an artifact.
           </div>
         )}
 
@@ -578,7 +672,7 @@ function Submission() {
             </Link>
             <button
               type="submit"
-              disabled={submitting || authLoading || !isAuthenticated}
+              disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-6 rounded-xl ml-3 shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? "Submitting..." : "Publish Artifact"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
