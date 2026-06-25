@@ -38,10 +38,8 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      if (!nextSession) {
-        setAuraUser(null);
-        setAuraUserError("");
-      }
+      setAuraUser(null);
+      setAuraUserError("");
       setLoading(false);
     });
 
@@ -77,11 +75,15 @@ export function AuthProvider({ children }) {
     };
   }, [session?.access_token]);
 
+  const auraUserLoading = Boolean(session?.access_token) && !auraUser && !auraUserError;
+
   const value = useMemo(
     () => ({
       accessToken: session?.access_token ?? null,
+      auraRole: auraUser?.role ?? null,
       auraUser,
       auraUserError,
+      auraUserLoading,
       isAuthenticated: Boolean(session?.user),
       isSupabaseConfigured,
       loading,
@@ -109,7 +111,7 @@ export function AuthProvider({ children }) {
       },
       user: session?.user ?? null,
     }),
-    [auraUser, auraUserError, loading, session],
+    [auraUser, auraUserError, auraUserLoading, loading, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
