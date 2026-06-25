@@ -56,7 +56,7 @@ export function AuthProvider({ children }) {
         const { error } = await client.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: window.location.href,
           },
         });
         if (error) {

@@ -1,18 +1,146 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 
 const Navbar = () => {
   const location = useLocation();
+  const {
+    isAuthenticated,
+    isSupabaseConfigured,
+    loading: authLoading,
+    signInWithEmail,
+    signOut,
+    user,
+  } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
 
   const navLinks = [
     { name: "Browse", path: "/" },
     { name: "Submit Artifact", path: "/submit" },
     { name: "Review", path: "/admin", badge: true },
-    { name: "My Submissions", path: "" },
+    { name: "My Submissions", path: "/profile" },
   ];
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
+  const userEmail = user?.email || "Signed in";
+
+  const openAuth = () => {
+    setAuthError("");
+    setAuthNotice("");
+    setIsAuthOpen(true);
+    setIsMenuOpen(false);
+  };
+
+  const closeAuth = () => {
+    setIsAuthOpen(false);
+    setAuthError("");
+    setAuthNotice("");
+  };
+
+  const handleSignIn = async (event) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthNotice("");
+
+    try {
+      await signInWithEmail(email.trim());
+      setAuthNotice("Magic link sent. Check your email.");
+    } catch (error) {
+      setAuthError(error.message || "Sign-in failed.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthBusy(true);
+    setAuthError("");
+    setAuthNotice("");
+
+    try {
+      await signOut();
+      setIsMenuOpen(false);
+    } catch (error) {
+      setAuthError(error.message || "Sign-out failed.");
+      setIsAuthOpen(true);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const AuthButton = ({ mobile = false }) => {
+    if (authLoading) {
+      return (
+        <span
+          className={
+            mobile
+              ? "block px-3 py-2 text-sm font-medium text-gray-400"
+              : "hidden sm:inline-flex items-center text-sm font-medium text-gray-400"
+          }
+        >
+          Checking session...
+        </span>
+      );
+    }
+
+    if (isAuthenticated) {
+      return (
+        <div
+          className={
+            mobile
+              ? "space-y-2 px-3 py-2"
+              : "hidden sm:flex items-center gap-3"
+          }
+        >
+          <Link
+            to="/profile"
+            onClick={() => setIsMenuOpen(false)}
+            className={
+              mobile
+                ? "block truncate text-sm font-medium text-gray-700"
+                : "max-w-56 truncate text-sm font-medium text-gray-700 hover:text-brand-600"
+            }
+            title={userEmail}
+          >
+            {userEmail}
+          </Link>
+          <button
+            className={
+              mobile
+                ? "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm font-medium text-gray-600 hover:bg-gray-50"
+                : "rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            }
+            disabled={authBusy}
+            onClick={handleSignOut}
+            type="button"
+          >
+            Sign out
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        className={
+          mobile
+            ? "mx-3 mb-2 w-[calc(100%-1.5rem)] rounded-lg bg-brand-600 px-3 py-2 text-left text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+            : "hidden sm:inline-flex rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-500/20 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+        }
+        disabled={!isSupabaseConfigured}
+        onClick={openAuth}
+        type="button"
+      >
+        Sign in
+      </button>
+    );
+  };
 
   return (
     <nav className="fixed w-full z-50 glass border-b border-gray-200 transition-colors duration-300">
@@ -61,39 +189,9 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Desktop User Profile / Mobile Menu Button */}
+          {/* Desktop Auth / Mobile Menu Button */}
           <div className="flex items-center space-x-4">
-            <Link
-              to=""
-              className="hidden sm:flex items-center hover:opacity-80 transition-opacity"
-            >
-              <span className="h-8 w-8 rounded-full border border-gray-300 bg-[#0ea5e9] flex items-center justify-center">
-                {/* Profile SVG Icon */}
-                <svg
-                  className="h-5 w-5 text-white"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12 12c2.7614 0 5-2.2386 5-5s-2.2386-5-5-5-5 2.2386-5 5 2.2386 5 5 5z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M3 21c0-3.866 3.5817-7 9-7s9 3.134 9 7"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className="sr-only">User profile</span>
-              </span>
-            </Link>
+            <AuthButton />
 
             {/* Mobile menu button */}
             <div className="md:hidden flex items-center">
@@ -138,8 +236,74 @@ const Navbar = () => {
               </div>
             </Link>
           ))}
+          <AuthButton mobile />
         </div>
       </div>
+
+      {isAuthOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Sign in</h2>
+                <p className="mt-1 text-sm text-gray-500">Use your email for AURA access.</p>
+              </div>
+              <button
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                onClick={closeAuth}
+                type="button"
+              >
+                <span className="sr-only">Close sign-in</span>
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            {!isSupabaseConfigured && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+                Sign-in is not configured for this environment.
+              </div>
+            )}
+
+            {authError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+                {authError}
+              </div>
+            )}
+
+            {authNotice && (
+              <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
+                {authNotice}
+              </div>
+            )}
+
+            <form className="space-y-4" onSubmit={handleSignIn}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="auth-email">
+                  Email
+                </label>
+                <input
+                  autoComplete="email"
+                  className="mt-1 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-gray-900 shadow-sm focus:border-brand-500 focus:ring-brand-500"
+                  id="auth-email"
+                  name="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </div>
+
+              <button
+                className="w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={authBusy || !isSupabaseConfigured}
+                type="submit"
+              >
+                {authBusy ? "Sending..." : "Send magic link"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </nav>
   );
 };
