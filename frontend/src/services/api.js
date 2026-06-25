@@ -299,6 +299,8 @@ export const fetchArtifactById = async (id) => {
     return artifact ? mapArtifact(artifact) : null;
 };
 
+export const fetchCurrentUser = async () => requestJson("/auth/me");
+
 export const createSubmission = async ({
     artifactName,
     contactEmail,
