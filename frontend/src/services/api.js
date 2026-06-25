@@ -1,3 +1,5 @@
+import { supabase } from "../lib/supabase";
+
 const API_BASE_URL = (
     import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"
 ).replace(/\/$/, "");
@@ -178,6 +180,20 @@ const parseApiError = async (response) => {
     return `AURA API request failed: ${response.status} ${response.statusText}`;
 };
 
+const getAccessToken = async () => {
+    if (!supabase) {
+        return null;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+        console.error("Failed to read Supabase session.", error);
+        return null;
+    }
+
+    return data.session?.access_token ?? null;
+};
+
 // Backend fields are canonical. The extra display aliases below keep the
 // current prototype components working while the UI is gradually migrated.
 const mapArtifact = (artifact) => {
@@ -251,12 +267,16 @@ const mapArtifact = (artifact) => {
 };
 
 const requestJson = async (path, options = {}) => {
+    const accessToken = await getAccessToken();
+    const headers = {
+        Accept: "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(options.headers || {}),
+    };
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
-        headers: {
-            Accept: "application/json",
-            ...(options.headers || {}),
-        },
+        headers,
     });
 
     if (response.status === 404) {
