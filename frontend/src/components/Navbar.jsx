@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth";
 const Navbar = () => {
   const location = useLocation();
   const {
+    auraRole,
     isAuthenticated,
     isSupabaseConfigured,
     loading: authLoading,
@@ -18,13 +19,14 @@ const Navbar = () => {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+  const canReview = ["reviewer", "admin"].includes(auraRole);
 
   const navLinks = [
     { name: "Browse", path: "/" },
     { name: "Submit Artifact", path: "/submit" },
+    ...(canReview ? [{ name: "Review", path: "/admin", badge: true }] : []),
     ...(isAuthenticated
       ? [
-          { name: "Review", path: "/admin", badge: true },
           { name: "My Submissions", path: "/profile" },
         ]
       : []),
