@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.dependencies import get_db_session, require_contributor
@@ -24,7 +24,12 @@ from app.db.models.enums import (
     SubmissionStatus,
     TagType,
 )
-from app.schemas.submission import SubmissionReceiptRead
+from app.schemas.submission import (
+    MySubmissionRead,
+    SubmittedArtifactRead,
+    SubmittedImageRead,
+    SubmissionReceiptRead,
+)
 
 router = APIRouter()
 
@@ -212,6 +217,86 @@ def _get_or_create_tag(
 def _cleanup_saved_files(paths: list[Path]) -> None:
     for path in paths:
         path.unlink(missing_ok=True)
+
+
+def _primary_image_for_submission(submission: Submission) -> Image | None:
+    return submission.images[0] if submission.images else None
+
+
+def _artifact_for_image(image: Image | None) -> Artifact | None:
+    if not image:
+        return None
+    primary_link = next(
+        (
+            image_link
+            for image_link in image.artifact_links
+            if image_link.relationship_type == ImageArtifactRelationshipType.PRIMARY
+        ),
+        None,
+    )
+    link = primary_link or (image.artifact_links[0] if image.artifact_links else None)
+    return link.artifact if link else None
+
+
+def _submission_summary(submission: Submission) -> MySubmissionRead:
+    image = _primary_image_for_submission(submission)
+    artifact = _artifact_for_image(image)
+
+    return MySubmissionRead(
+        id=submission.id,
+        contact_email=submission.contact_email,
+        status=submission.status,
+        submitted_at=submission.submitted_at,
+        reviewed_at=submission.reviewed_at,
+        created_at=submission.created_at,
+        updated_at=submission.updated_at,
+        artifact=(
+            SubmittedArtifactRead(
+                id=artifact.id,
+                title=artifact.title,
+                default_modality=artifact.default_modality,
+                status=artifact.status,
+                tags=[],
+            )
+            if artifact
+            else None
+        ),
+        image=(
+            SubmittedImageRead(
+                id=image.id,
+                title=image.title,
+                modality=image.modality,
+                vendor=image.vendor,
+                sequence=image.sequence,
+                protocol=image.protocol,
+                field_strength=image.field_strength,
+                visibility_status=image.visibility_status,
+            )
+            if image
+            else None
+        ),
+        file_count=len(image.files) if image else 0,
+    )
+
+
+@router.get("/me", response_model=list[MySubmissionRead])
+def list_my_submissions(
+    current_user: Annotated[User, Depends(require_contributor)],
+    db: Session = Depends(get_db_session),
+):
+    statement = (
+        select(Submission)
+        .where(Submission.submitted_by_id == current_user.id)
+        .options(
+            selectinload(Submission.images).selectinload(Image.files),
+            selectinload(Submission.images)
+            .selectinload(Image.artifact_links)
+            .selectinload(ImageArtifact.artifact),
+        )
+        .order_by(Submission.created_at.desc())
+    )
+    rows = db.scalars(statement).unique().all()
+    return [_submission_summary(submission) for submission in rows]
 
 
 @router.post("", response_model=SubmissionReceiptRead, status_code=status.HTTP_201_CREATED)

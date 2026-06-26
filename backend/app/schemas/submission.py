@@ -57,3 +57,16 @@ class SubmissionReceiptRead(SubmissionRead):
     artifact: SubmittedArtifactRead
     image: SubmittedImageRead
     files: list[SubmittedFileRead] = Field(default_factory=list)
+
+
+class MySubmissionRead(BaseModel):
+    id: UUID
+    contact_email: str | None = None
+    status: SubmissionStatus
+    submitted_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    artifact: SubmittedArtifactRead | None = None
+    image: SubmittedImageRead | None = None
+    file_count: int = 0

@@ -17,6 +17,7 @@ from app.db.models.enums import (
     ImageVisibilityStatus,
     Modality,
     StorageProvider,
+    SubmissionStatus,
     UserRole,
 )
 
@@ -318,6 +319,77 @@ def test_submission_route_requires_authenticated_contributor():
     }
 
     assert "require_contributor" in dependency_names
+
+
+def test_my_submissions_route_requires_authenticated_contributor():
+    route = next(route for route in submissions.router.routes if route.path == "/me")
+    dependency_names = {
+        dependency.call.__name__
+        for dependency in route.dependant.dependencies
+        if dependency.call
+    }
+
+    assert "require_contributor" in dependency_names
+
+
+def test_list_my_submissions_returns_current_user_items():
+    now = datetime.now(UTC)
+    user = make_user()
+    submission = Submission(
+        id=uuid4(),
+        submitted_by_id=user.id,
+        contact_email=user.email,
+        status=SubmissionStatus.APPROVED,
+        permission_confirmed=True,
+        pseudonymisation_confirmed=True,
+        submitted_at=now,
+        reviewed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    artifact = make_artifact(
+        title="Submitted artifact",
+        status=ArtifactStatus.COMMUNITY_PUBLISHED,
+        created_at=now,
+        updated_at=now,
+    )
+    image = Image(
+        id=uuid4(),
+        title="Submitted image",
+        modality=Modality.ASL,
+        vendor="Siemens",
+        visibility_status=ImageVisibilityStatus.APPROVED_PUBLIC,
+    )
+    image.files = [
+        ImageFile(
+            id=uuid4(),
+            file_role=FileRole.OTHER,
+            file_type=FileType.PNG,
+            storage_provider=StorageProvider.LOCAL_DEV,
+            storage_bucket="private",
+            storage_key="submissions/example.png",
+            is_public=True,
+        )
+    ]
+    image.artifact_links = [
+        ImageArtifact(
+            id=uuid4(),
+            image=image,
+            artifact=artifact,
+            relationship_type=ImageArtifactRelationshipType.PRIMARY,
+        )
+    ]
+    submission.images = [image]
+    db = FakeReadSession(scalars_items=[submission])
+
+    response = submissions.list_my_submissions(current_user=user, db=db)
+
+    assert len(response) == 1
+    assert response[0].id == submission.id
+    assert response[0].artifact.title == "Submitted artifact"
+    assert response[0].artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert response[0].image.vendor == "Siemens"
+    assert response[0].file_count == 1
 
 
 @pytest.mark.parametrize(

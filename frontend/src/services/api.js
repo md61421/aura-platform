@@ -316,6 +316,8 @@ export const fetchArtifactById = async (id) => {
 
 export const fetchCurrentUser = async () => requestJson("/auth/me");
 
+export const fetchMySubmissions = async () => requestJson("/submissions/me");
+
 export const moderateArtifact = async (artifactId, action, reviewNote = "") => {
     const paths = {
         archive: `/admin/artifacts/${encodeURIComponent(artifactId)}/archive`,
