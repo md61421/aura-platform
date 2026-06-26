@@ -2,12 +2,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+import rsa
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import jwt
+from jose import jwk, jwt
 
 from app.api.v1.auth import read_current_user
 from app.api.v1.router import api_router
+from app.core import auth as auth_module
 from app.core.auth import SUPABASE_JWT_ALGORITHM, verify_supabase_jwt
 from app.core.config import settings
 from app.core.dependencies import (
@@ -113,6 +115,31 @@ def test_verify_supabase_jwt_accepts_valid_token():
     assert claims.email == "researcher@example.org"
     assert claims.role == "authenticated"
     assert claims.raw["aud"] == TEST_AUDIENCE
+
+
+def test_verify_supabase_jwt_accepts_asymmetric_jwks_token(monkeypatch):
+    public_key, private_key = rsa.newkeys(2048)
+    private_pem = private_key.save_pkcs1("PEM")
+    public_pem = public_key.save_pkcs1("PEM")
+    public_jwk = jwk.construct(public_pem, algorithm="RS256").to_dict()
+    public_jwk["kid"] = "test-signing-key"
+    token, payload = make_token()
+    asymmetric_token = jwt.encode(
+        payload,
+        private_pem,
+        algorithm="RS256",
+        headers={"kid": "test-signing-key"},
+    )
+    monkeypatch.setattr(settings, "SUPABASE_URL", "https://test-project.supabase.co")
+    monkeypatch.setattr(settings, "SUPABASE_JWT_AUDIENCE", TEST_AUDIENCE)
+    monkeypatch.setattr(settings, "SUPABASE_JWT_ISSUER", TEST_ISSUER)
+    monkeypatch.setattr(auth_module, "_get_jwks", lambda _url: [public_jwk])
+
+    claims = verify_supabase_jwt(asymmetric_token)
+
+    assert token != asymmetric_token
+    assert claims.sub == payload["sub"]
+    assert claims.email == payload["email"]
 
 
 def test_verify_supabase_jwt_rejects_wrong_signature():
