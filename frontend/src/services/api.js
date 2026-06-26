@@ -268,8 +268,10 @@ const mapArtifact = (artifact) => {
 
 const requestJson = async (path, options = {}) => {
     const accessToken = await getAccessToken();
+    const isFormData = options.body instanceof FormData;
     const headers = {
         Accept: "application/json",
+        ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(options.headers || {}),
     };
@@ -289,8 +291,21 @@ const requestJson = async (path, options = {}) => {
     return response.json();
 };
 
-export const fetchArtifacts = async () => {
-    const artifacts = await requestJson("/artifacts");
+const buildQueryString = (params = {}) => {
+    const searchParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (isPresent(value)) {
+            searchParams.set(key, value);
+        }
+    });
+
+    const query = searchParams.toString();
+    return query ? `?${query}` : "";
+};
+
+export const fetchArtifacts = async (params = {}) => {
+    const artifacts = await requestJson(`/artifacts${buildQueryString(params)}`);
     return asArray(artifacts).map(mapArtifact);
 };
 
@@ -300,6 +315,27 @@ export const fetchArtifactById = async (id) => {
 };
 
 export const fetchCurrentUser = async () => requestJson("/auth/me");
+
+export const moderateArtifact = async (artifactId, action, reviewNote = "") => {
+    const paths = {
+        archive: `/admin/artifacts/${encodeURIComponent(artifactId)}/archive`,
+        flag: `/review/artifacts/${encodeURIComponent(artifactId)}/flag`,
+        reject: `/review/artifacts/${encodeURIComponent(artifactId)}/reject`,
+        verify: `/review/artifacts/${encodeURIComponent(artifactId)}/verify`,
+    };
+    const path = paths[action];
+
+    if (!path) {
+        throw new Error(`Unknown moderation action: ${action}`);
+    }
+
+    return requestJson(path, {
+        method: "POST",
+        body: JSON.stringify({
+            review_note: reviewNote.trim() || null,
+        }),
+    });
+};
 
 export const createSubmission = async ({
     artifactName,
