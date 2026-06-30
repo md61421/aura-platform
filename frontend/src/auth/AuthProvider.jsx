@@ -88,12 +88,12 @@ export function AuthProvider({ children }) {
       isSupabaseConfigured,
       loading,
       session,
-      signInWithEmail: async (email) => {
+      signInWithEmail: async (email, redirectTo = window.location.origin) => {
         const client = getSupabaseClient();
         const { error } = await client.auth.signInWithOtp({
           email,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: redirectTo,
           },
         });
         if (error) {

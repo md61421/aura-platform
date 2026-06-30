@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
 import { useAuth } from "../auth/useAuth";
 import { fetchMySubmissions } from "../services/api";
@@ -166,22 +166,7 @@ const Profile = () => {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="animate-fade-in mx-auto max-w-3xl py-16">
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-extrabold text-gray-900">Sign in required</h1>
-          <p className="mx-auto mt-3 max-w-md text-sm text-gray-500">
-            Your submissions are linked to your AURA account.
-          </p>
-          <Link
-            className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:bg-brand-700"
-            to="/"
-          >
-            Go to home
-          </Link>
-        </div>
-      </div>
-    );
+    return <Navigate replace to="/auth?next=/profile" />;
   }
 
   return (

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./useAuth";
 
@@ -25,6 +25,7 @@ function AccessPanel({ title, message, action }) {
 }
 
 export function RequireRole({ allowedRoles, children }) {
+  const location = useLocation();
   const {
     auraRole,
     auraUserError,
@@ -43,20 +44,8 @@ export function RequireRole({ allowedRoles, children }) {
   }
 
   if (!isAuthenticated) {
-    return (
-      <AccessPanel
-        title="Sign in required"
-        message="Reviewer tools are only available after sign-in."
-        action={
-          <Link
-            className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:bg-brand-700"
-            to="/"
-          >
-            Go to home
-          </Link>
-        }
-      />
-    );
+    const next = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate replace to={`/auth?next=${next}`} />;
   }
 
   if (auraUserError) {

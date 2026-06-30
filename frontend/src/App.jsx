@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
+import Auth from "./pages/Auth";
 import Detail from "./pages/Detail";
 import Submission from "./pages/Submission";
 import Admin from "./pages/Admin";
@@ -14,6 +15,7 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/artifact/:id" element={<Detail />} />
           <Route path="/submit" element={<Submission />} />
           <Route
