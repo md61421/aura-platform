@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
+import Auth from "./pages/Auth";
 import Detail from "./pages/Detail";
 import Submission from "./pages/Submission";
 import Admin from "./pages/Admin";
 import Compare from "./pages/Compare";
 import Profile from "./pages/Profile";
 import Layout from "./components/Layout";
+import { RequireRole } from "./auth/RequireRole";
 
 function App() {
   return (
@@ -13,9 +15,17 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/artifact/:id" element={<Detail />} />
           <Route path="/submit" element={<Submission />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route
+            path="/admin"
+            element={
+              <RequireRole allowedRoles={["reviewer", "admin"]}>
+                <Admin />
+              </RequireRole>
+            }
+          />
           <Route path="/compare" element={<Compare />} />
           <Route path="/profile" element={<Profile />} />
         </Routes>

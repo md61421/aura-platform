@@ -1,3 +1,5 @@
+import { supabase } from "../lib/supabase";
+
 const API_BASE_URL = (
     import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"
 ).replace(/\/$/, "");
@@ -128,8 +130,17 @@ const primaryImage = (images = []) =>
     null;
 
 const statusLabel = (status) => {
-    if (status === "approved") {
+    if (status === "osipi_verified" || status === "approved") {
         return "OSIPI Verified";
+    }
+    if (status === "community_published") {
+        return "Community Published";
+    }
+    if (status === "flagged") {
+        return "Flagged";
+    }
+    if (status === "rejected") {
+        return "Rejected";
     }
     if (status === "archived") {
         return "Archived";
@@ -167,6 +178,20 @@ const parseApiError = async (response) => {
     }
 
     return `AURA API request failed: ${response.status} ${response.statusText}`;
+};
+
+const getAccessToken = async () => {
+    if (!supabase) {
+        return null;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+        console.error("Failed to read Supabase session.", error);
+        return null;
+    }
+
+    return data.session?.access_token ?? null;
 };
 
 // Backend fields are canonical. The extra display aliases below keep the
@@ -242,12 +267,18 @@ const mapArtifact = (artifact) => {
 };
 
 const requestJson = async (path, options = {}) => {
+    const accessToken = await getAccessToken();
+    const isFormData = options.body instanceof FormData;
+    const headers = {
+        Accept: "application/json",
+        ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(options.headers || {}),
+    };
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
-        headers: {
-            Accept: "application/json",
-            ...(options.headers || {}),
-        },
+        headers,
     });
 
     if (response.status === 404) {
@@ -260,14 +291,52 @@ const requestJson = async (path, options = {}) => {
     return response.json();
 };
 
-export const fetchArtifacts = async () => {
-    const artifacts = await requestJson("/artifacts");
+const buildQueryString = (params = {}) => {
+    const searchParams = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (isPresent(value)) {
+            searchParams.set(key, value);
+        }
+    });
+
+    const query = searchParams.toString();
+    return query ? `?${query}` : "";
+};
+
+export const fetchArtifacts = async (params = {}) => {
+    const artifacts = await requestJson(`/artifacts${buildQueryString(params)}`);
     return asArray(artifacts).map(mapArtifact);
 };
 
 export const fetchArtifactById = async (id) => {
     const artifact = await requestJson(`/artifacts/${encodeURIComponent(id)}`);
     return artifact ? mapArtifact(artifact) : null;
+};
+
+export const fetchCurrentUser = async () => requestJson("/auth/me");
+
+export const fetchMySubmissions = async () => requestJson("/submissions/me");
+
+export const moderateArtifact = async (artifactId, action, reviewNote = "") => {
+    const paths = {
+        archive: `/admin/artifacts/${encodeURIComponent(artifactId)}/archive`,
+        flag: `/review/artifacts/${encodeURIComponent(artifactId)}/flag`,
+        reject: `/review/artifacts/${encodeURIComponent(artifactId)}/reject`,
+        verify: `/review/artifacts/${encodeURIComponent(artifactId)}/verify`,
+    };
+    const path = paths[action];
+
+    if (!path) {
+        throw new Error(`Unknown moderation action: ${action}`);
+    }
+
+    return requestJson(path, {
+        method: "POST",
+        body: JSON.stringify({
+            review_note: reviewNote.trim() || null,
+        }),
+    });
 };
 
 export const createSubmission = async ({

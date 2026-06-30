@@ -13,9 +13,12 @@ class VoteCreate(BaseModel):
     vote_type: VoteType
 
 
+class CommunityVoteCreate(BaseModel):
+    vote_type: VoteType
+
+
 class VoteRead(VoteCreate):
     model_config = from_attributes
 
     id: UUID
     created_at: datetime
-

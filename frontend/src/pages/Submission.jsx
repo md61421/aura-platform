@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { useAuth } from "../auth/useAuth";
 import { createSubmission } from "../services/api";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -95,6 +96,11 @@ const validateSubmission = (form) => {
 };
 
 function Submission() {
+  const {
+    isAuthenticated,
+    loading: authLoading,
+    user,
+  } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [files, setFiles] = useState([]);
@@ -196,6 +202,15 @@ function Submission() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (authLoading) {
+      setFormError("Checking your sign-in status. Try again in a moment.");
+      return;
+    }
+    if (!isAuthenticated) {
+      setFormError("Sign in before submitting an artifact.");
+      return;
+    }
+
     const symptomsForSubmit = normaliseTags([...form.symptoms, tagInput]);
     const payload = { ...form, symptoms: symptomsForSubmit };
     const validationError = validateSubmission(payload);
@@ -224,6 +239,22 @@ function Submission() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="animate-fade-in max-w-4xl mx-auto">
+        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto mb-4 h-8 w-8 rounded-full border-2 border-gray-200 border-t-brand-500 animate-spin"></div>
+          <h1 className="text-xl font-bold text-gray-900">Checking sign-in status</h1>
+          <p className="mt-2 text-sm text-gray-500">Preparing the submission workspace.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate replace to="/auth?next=/submit" />;
+  }
+
   if (receipt) {
     return (
       <div id="submit-success" className="py-12 text-center animate-fade-in max-w-4xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm">
@@ -231,7 +262,7 @@ function Submission() {
             <i className="fas fa-check text-3xl text-green-600"></i>
         </div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Submission Received!</h3>
-        <p className="text-gray-500 max-w-sm mx-auto mb-8">Your artifact has been sent to the reviewer queue. You'll be notified once it's approved and published.</p>
+        <p className="text-gray-500 max-w-sm mx-auto mb-8">Your artifact is published to the community and linked to your account.</p>
         <p className="text-xs text-gray-400 max-w-sm mx-auto mb-8">Receipt ID: {receipt.id}</p>
         <div className="flex flex-col sm:flex-row justify-center gap-3">
           <button onClick={resetForm} className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-8 rounded-xl transition-colors shadow-lg shadow-brand-500/30" type="button">
@@ -249,7 +280,7 @@ function Submission() {
     <div className="animate-fade-in max-w-4xl mx-auto">
         <div className="text-center mb-10">
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Submit an Artifact</h1>
-            <p className="mt-2 text-gray-500">Help grow the repository by submitting artifact examples for review.</p>
+            <p className="mt-2 text-gray-500">Publishing as {user?.email || "your AURA account"}.</p>
         </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
@@ -560,7 +591,7 @@ function Submission() {
               disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-6 rounded-xl ml-3 shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {submitting ? "Submitting..." : "Submit for Review"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
+              {submitting ? "Submitting..." : "Publish Artifact"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
                     </button>
                 </div>
             </form>
