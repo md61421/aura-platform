@@ -25,6 +25,11 @@ function Home() {
     setQuery, 
     sortBy,
     setSortBy,
+    filters,
+    setFilter,
+    toggleFilter,
+    resetFilters,
+    filterOptions,
     clearFilters
   } = useArtifacts();
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
@@ -45,6 +50,20 @@ function Home() {
 
   const handleSortChange = (value) => {
     setSortBy(value);
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (key, value) => {
+    if (key === "scanner") {
+      setFilter(key, value);
+    } else {
+      toggleFilter(key, value);
+    }
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    resetFilters();
     setCurrentPage(1);
   };
 
@@ -119,7 +138,12 @@ function Home() {
 
         {/* Sidebar - Collapsible on Mobile */}
         <div className={`${isFilterOpen ? 'block' : 'hidden'} lg:block w-full lg:w-64 flex-shrink-0 animate-slide-in-left lg:animate-none`}>
-          <FilterSidebar />
+          <FilterSidebar
+            filters={filters}
+            filterOptions={filterOptions}
+            onFilterChange={handleFilterChange}
+            onReset={handleResetFilters}
+          />
         </div>
 
         <div className="flex-1">

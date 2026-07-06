@@ -6,6 +6,15 @@ const timestampForSort = (value) => {
     return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+const defaultFilters = {
+    modalities: [],
+    categories: [],
+    scanner: "",
+};
+
+const uniqueSorted = (values) =>
+    [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
 /**
  * Custom hook to manage fetching and filtering artifacts.
  */
@@ -17,6 +26,7 @@ export function useArtifacts() {
     // Filter and Sort states
     const [query, setQuery] = useState("");
     const [sortBy, setSortBy] = useState("reliability");
+    const [filters, setFilters] = useState(defaultFilters);
 
     useEffect(() => {
         let isMounted = true;
@@ -44,16 +54,20 @@ export function useArtifacts() {
     }, []);
 
     const filteredArtifacts = useMemo(() => {
-        // First filter by query
         const filtered = artifacts.filter((artifact) => {
             const searchStr = query.toLowerCase();
-            return (
-                artifact.name.toLowerCase().includes(searchStr) ||
+            const matchesQuery = (
+                (artifact.name && artifact.name.toLowerCase().includes(searchStr)) ||
                 (artifact.description && artifact.description.toLowerCase().includes(searchStr)) ||
                 (artifact.explanation && artifact.explanation.toLowerCase().includes(searchStr)) ||
                 (artifact.alt_names && artifact.alt_names.toLowerCase().includes(searchStr)) ||
                 (artifact.symptoms && artifact.symptoms.some((s) => s.toLowerCase().includes(searchStr)))
             );
+            const matchesModality = filters.modalities.length === 0 || filters.modalities.includes(artifact.modality);
+            const matchesCategory = filters.categories.length === 0 || filters.categories.includes(artifact.category);
+            const matchesScanner = !filters.scanner || artifact.scanner === filters.scanner;
+
+            return matchesQuery && matchesModality && matchesCategory && matchesScanner;
         });
 
         // Then apply sorting
@@ -75,11 +89,43 @@ export function useArtifacts() {
             }
             return 0;
         });
-    }, [artifacts, query, sortBy]);
+    }, [artifacts, filters, query, sortBy]);
+
+    const filterOptions = useMemo(() => ({
+        modalities: uniqueSorted(artifacts.map((artifact) => artifact.modality)),
+        categories: uniqueSorted(artifacts.map((artifact) => artifact.category)),
+        scanners: uniqueSorted(artifacts.map((artifact) => artifact.scanner)),
+    }), [artifacts]);
+
+    const setFilter = (key, value) => {
+        setFilters((current) => ({
+            ...current,
+            [key]: value,
+        }));
+    };
+
+    const toggleFilter = (key, value) => {
+        setFilters((current) => {
+            const values = current[key];
+            const nextValues = values.includes(value)
+                ? values.filter((currentValue) => currentValue !== value)
+                : [...values, value];
+
+            return {
+                ...current,
+                [key]: nextValues,
+            };
+        });
+    };
+
+    const resetFilters = () => {
+        setFilters(defaultFilters);
+    };
 
     const clearFilters = () => {
         setQuery("");
         setSortBy("reliability");
+        resetFilters();
     }
 
     return {
@@ -91,6 +137,11 @@ export function useArtifacts() {
         setQuery,
         sortBy,
         setSortBy,
+        filters,
+        setFilter,
+        toggleFilter,
+        resetFilters,
+        filterOptions,
         clearFilters
     };
 }
