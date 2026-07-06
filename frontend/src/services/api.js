@@ -221,8 +221,9 @@ const mapArtifact = (artifact) => {
             file_type: file.file_type,
             relationship_type: file.image_relationship_type,
         }));
-    const reliabilityScore = image?.reliability_score || 0;
+    const reliabilityScore = Number(image?.reliability_score || 0);
     const votes = reliabilityVotesFromScore(reliabilityScore);
+    const dateAddedRaw = artifact.created_at || artifact.updated_at || null;
 
     return {
         id: String(artifact.id),
@@ -257,7 +258,8 @@ const mapArtifact = (artifact) => {
         sequence: firstText(image?.sequence, "Not specified"),
         protocol: image?.protocol || null,
         field_strength: image?.field_strength || null,
-        date_added: formatDisplayDate(artifact.created_at || artifact.updated_at),
+        date_added: formatDisplayDate(dateAddedRaw),
+        date_added_raw: dateAddedRaw,
         status: statusLabel(artifact.status),
         reliability_score: reliabilityScore,
         agreements: votes.agreements,

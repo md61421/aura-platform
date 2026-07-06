@@ -5,6 +5,13 @@ import SearchBar from "../components/SearchBar";
 import Pagination from "../components/Pagination";
 import { useArtifacts } from "../hooks/useArtifacts";
 
+const SORT_OPTIONS = [
+  { value: "reliability", shortLabel: "Reliability", label: "Reliability Score (High-Low)" },
+  { value: "name", shortLabel: "A-Z", label: "Alphabetical (A-Z)" },
+  { value: "date", shortLabel: "Newest", label: "Date Added (Newest)" },
+  { value: "date_oldest", shortLabel: "Oldest", label: "Date Added (Oldest)" },
+];
+
 function Home() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const { 
@@ -69,9 +76,11 @@ function Home() {
               onChange={(e) => setSortBy(e.target.value)}
               className="bg-white border border-gray-200 text-gray-700 text-xs rounded-xl py-2 px-2.5 font-semibold focus:outline-none transition-all cursor-pointer shadow-sm"
             >
-              <option value="reliability">Sort: Reliability</option>
-              <option value="name">Sort: A-Z</option>
-              <option value="date">Sort: Newest</option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Sort: {option.shortLabel}
+                </option>
+              ))}
             </select>
           </div>
           
@@ -100,9 +109,11 @@ function Home() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="bg-white border border-gray-250 text-gray-700 text-xs rounded-xl py-1.5 px-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all cursor-pointer shadow-2xs"
                 >
-                  <option value="reliability">Reliability Score (High-Low)</option>
-                  <option value="name">Alphabetical (A-Z)</option>
-                  <option value="date">Date Added (Newest)</option>
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 

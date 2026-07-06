@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchArtifacts } from '../services/api';
 
+const timestampForSort = (value) => {
+    const timestamp = new Date(value || "").getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
 /**
  * Custom hook to manage fetching and filtering artifacts.
  */
@@ -54,18 +59,19 @@ export function useArtifacts() {
         // Then apply sorting
         return [...filtered].sort((a, b) => {
             if (sortBy === "reliability") {
-                const scoreA = (a.agreements || 0) - (a.disagreements || 0);
-                const scoreB = (b.agreements || 0) - (b.disagreements || 0);
+                const scoreA = Number(a.reliability_score || 0);
+                const scoreB = Number(b.reliability_score || 0);
                 return scoreB - scoreA; // Descending
             } else if (sortBy === "name") {
-                return a.name.localeCompare(b.name); // Ascending
+                return (a.name || "").localeCompare(b.name || ""); // Ascending
             } else if (sortBy === "date") {
-                const dateA = new Date(a.date_added).getTime();
-                const dateB = new Date(b.date_added).getTime();
-                if (isNaN(dateA) || isNaN(dateB)) {
-                    return String(b.id).localeCompare(String(a.id));
-                }
+                const dateA = timestampForSort(a.date_added_raw);
+                const dateB = timestampForSort(b.date_added_raw);
                 return dateB - dateA;
+            } else if (sortBy === "date_oldest") {
+                const dateA = timestampForSort(a.date_added_raw);
+                const dateB = timestampForSort(b.date_added_raw);
+                return dateA - dateB;
             }
             return 0;
         });
