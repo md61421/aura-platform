@@ -1,12 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import FilterSidebar from "../components/FilterSidebar";
 import ArtifactCard from "../components/ArtifactCard";
 import SearchBar from "../components/SearchBar";
 import Pagination from "../components/Pagination";
 import { useArtifacts } from "../hooks/useArtifacts";
 
+const SORT_OPTIONS = [
+  { value: "reliability", shortLabel: "Reliability", label: "Reliability Score (High-Low)" },
+  { value: "name", shortLabel: "A-Z", label: "Alphabetical (A-Z)" },
+  { value: "date", shortLabel: "Newest", label: "Date Added (Newest)" },
+  { value: "date_oldest", shortLabel: "Oldest", label: "Date Added (Oldest)" },
+];
+
+const ITEMS_PER_PAGE = 9;
+
 function Home() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const { 
     filteredArtifacts: filtered, 
     isLoading,
@@ -15,8 +25,52 @@ function Home() {
     setQuery, 
     sortBy,
     setSortBy,
+    filters,
+    setFilter,
+    toggleFilter,
+    resetFilters,
+    filterOptions,
     clearFilters
   } = useArtifacts();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const pageEnd = pageStart + ITEMS_PER_PAGE;
+  const visibleArtifacts = useMemo(
+    () => filtered.slice(pageStart, pageEnd),
+    [filtered, pageStart, pageEnd],
+  );
+  const visibleStart = filtered.length === 0 ? 0 : pageStart + 1;
+  const visibleEnd = Math.min(pageEnd, filtered.length);
+
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value) => {
+    setSortBy(value);
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (key, value) => {
+    if (key === "scanner") {
+      setFilter(key, value);
+    } else {
+      toggleFilter(key, value);
+    }
+    setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    resetFilters();
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = () => {
+    clearFilters();
+    setCurrentPage(1);
+  };
 
   if (isLoading) {
     return <div className="text-center py-20 text-gray-500">Loading artifacts...</div>;
@@ -47,7 +101,7 @@ function Home() {
         <div className="px-2 sm:px-0">
           <SearchBar 
             query={query} 
-            setQuery={setQuery} 
+            setQuery={handleQueryChange} 
           />
         </div>
       </div>
@@ -66,12 +120,14 @@ function Home() {
             
             <select 
               value={sortBy} 
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => handleSortChange(e.target.value)}
               className="bg-white border border-gray-200 text-gray-700 text-xs rounded-xl py-2 px-2.5 font-semibold focus:outline-none transition-all cursor-pointer shadow-sm"
             >
-              <option value="reliability">Sort: Reliability</option>
-              <option value="name">Sort: A-Z</option>
-              <option value="date">Sort: Newest</option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  Sort: {option.shortLabel}
+                </option>
+              ))}
             </select>
           </div>
           
@@ -82,14 +138,23 @@ function Home() {
 
         {/* Sidebar - Collapsible on Mobile */}
         <div className={`${isFilterOpen ? 'block' : 'hidden'} lg:block w-full lg:w-64 flex-shrink-0 animate-slide-in-left lg:animate-none`}>
-          <FilterSidebar />
+          <FilterSidebar
+            filters={filters}
+            filterOptions={filterOptions}
+            onFilterChange={handleFilterChange}
+            onReset={handleResetFilters}
+          />
         </div>
 
         <div className="flex-1">
           {/* Desktop Filter / Grid Header */}
           <div className="hidden lg:flex justify-between items-center mb-6">
             <p className="text-sm text-gray-500">
-              Showing <span className="font-semibold text-gray-900">{filtered.length}</span> artifacts
+              Showing{" "}
+              <span className="font-semibold text-gray-900">
+                {visibleStart}-{visibleEnd}
+              </span>{" "}
+              of <span className="font-semibold text-gray-900">{filtered.length}</span> artifacts
             </p>
             <div className="flex items-center gap-4">
               {/* Desktop Sort Dropdown */}
@@ -97,31 +162,33 @@ function Home() {
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sort By:</span>
                 <select 
                   value={sortBy} 
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => handleSortChange(e.target.value)}
                   className="bg-white border border-gray-250 text-gray-700 text-xs rounded-xl py-1.5 px-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all cursor-pointer shadow-2xs"
                 >
-                  <option value="reliability">Reliability Score (High-Low)</option>
-                  <option value="name">Alphabetical (A-Z)</option>
-                  <option value="date">Date Added (Newest)</option>
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
-                <button className="p-1.5 text-gray-300 hover:text-gray-900 transition-colors"><i className="fas fa-th-large"></i></button>
-                <button className="p-1.5 text-gray-300 hover:text-gray-900 transition-colors"><i className="fas fa-list"></i></button>
-              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filtered.map((artifact) => (
+            {visibleArtifacts.map((artifact) => (
               <ArtifactCard key={artifact.id} artifact={artifact} />
             ))}
           </div>
           
           {filtered.length > 0 && (
             <div className="mt-8">
-              <Pagination />
+              <Pagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </div>
           )}
 
@@ -133,7 +200,7 @@ function Home() {
               <h3 className="text-xl font-bold text-gray-900 mb-2">No artifacts found</h3>
               <p className="text-gray-500 max-w-xs mx-auto">Try adjusting your filters or search terms to find what you're looking for.</p>
               <button 
-                onClick={clearFilters}
+                onClick={handleClearFilters}
                 className="mt-6 px-6 py-2 bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition-colors shadow-lg shadow-brand-200 cursor-pointer"
               >
                 Clear all filters

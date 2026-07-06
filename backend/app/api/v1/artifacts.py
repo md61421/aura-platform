@@ -46,6 +46,9 @@ def _artifact_summary(artifact: Artifact) -> ArtifactSummaryRead:
         default_modality=artifact.default_modality,
         status=artifact.status,
         tags=_tag_names(artifact),
+        images=_public_image_summaries(artifact),
+        created_at=artifact.created_at,
+        updated_at=artifact.updated_at,
     )
 
 
@@ -91,9 +94,6 @@ def _artifact_detail(artifact: Artifact) -> ArtifactDetailRead:
     return ArtifactDetailRead(
         **summary.model_dump(),
         remedies=artifact.remedies,
-        images=_public_image_summaries(artifact),
-        created_at=artifact.created_at,
-        updated_at=artifact.updated_at,
     )
 
 

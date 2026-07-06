@@ -1,6 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchArtifacts } from '../services/api';
 
+const timestampForSort = (value) => {
+    const timestamp = new Date(value || "").getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const defaultFilters = {
+    modalities: [],
+    categories: [],
+    scanner: "",
+};
+
+const uniqueSorted = (values) =>
+    [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
 /**
  * Custom hook to manage fetching and filtering artifacts.
  */
@@ -12,6 +26,7 @@ export function useArtifacts() {
     // Filter and Sort states
     const [query, setQuery] = useState("");
     const [sortBy, setSortBy] = useState("reliability");
+    const [filters, setFilters] = useState(defaultFilters);
 
     useEffect(() => {
         let isMounted = true;
@@ -39,41 +54,78 @@ export function useArtifacts() {
     }, []);
 
     const filteredArtifacts = useMemo(() => {
-        // First filter by query
         const filtered = artifacts.filter((artifact) => {
             const searchStr = query.toLowerCase();
-            return (
-                artifact.name.toLowerCase().includes(searchStr) ||
+            const matchesQuery = (
+                (artifact.name && artifact.name.toLowerCase().includes(searchStr)) ||
                 (artifact.description && artifact.description.toLowerCase().includes(searchStr)) ||
                 (artifact.explanation && artifact.explanation.toLowerCase().includes(searchStr)) ||
                 (artifact.alt_names && artifact.alt_names.toLowerCase().includes(searchStr)) ||
                 (artifact.symptoms && artifact.symptoms.some((s) => s.toLowerCase().includes(searchStr)))
             );
+            const matchesModality = filters.modalities.length === 0 || filters.modalities.includes(artifact.modality);
+            const matchesCategory = filters.categories.length === 0 || filters.categories.includes(artifact.category);
+            const matchesScanner = !filters.scanner || artifact.scanner === filters.scanner;
+
+            return matchesQuery && matchesModality && matchesCategory && matchesScanner;
         });
 
         // Then apply sorting
         return [...filtered].sort((a, b) => {
             if (sortBy === "reliability") {
-                const scoreA = (a.agreements || 0) - (a.disagreements || 0);
-                const scoreB = (b.agreements || 0) - (b.disagreements || 0);
+                const scoreA = Number(a.reliability_score || 0);
+                const scoreB = Number(b.reliability_score || 0);
                 return scoreB - scoreA; // Descending
             } else if (sortBy === "name") {
-                return a.name.localeCompare(b.name); // Ascending
+                return (a.name || "").localeCompare(b.name || ""); // Ascending
             } else if (sortBy === "date") {
-                const dateA = new Date(a.date_added).getTime();
-                const dateB = new Date(b.date_added).getTime();
-                if (isNaN(dateA) || isNaN(dateB)) {
-                    return String(b.id).localeCompare(String(a.id));
-                }
+                const dateA = timestampForSort(a.date_added_raw);
+                const dateB = timestampForSort(b.date_added_raw);
                 return dateB - dateA;
+            } else if (sortBy === "date_oldest") {
+                const dateA = timestampForSort(a.date_added_raw);
+                const dateB = timestampForSort(b.date_added_raw);
+                return dateA - dateB;
             }
             return 0;
         });
-    }, [artifacts, query, sortBy]);
+    }, [artifacts, filters, query, sortBy]);
+
+    const filterOptions = useMemo(() => ({
+        modalities: uniqueSorted(artifacts.map((artifact) => artifact.modality)),
+        categories: uniqueSorted(artifacts.map((artifact) => artifact.category)),
+        scanners: uniqueSorted(artifacts.map((artifact) => artifact.scanner)),
+    }), [artifacts]);
+
+    const setFilter = (key, value) => {
+        setFilters((current) => ({
+            ...current,
+            [key]: value,
+        }));
+    };
+
+    const toggleFilter = (key, value) => {
+        setFilters((current) => {
+            const values = current[key];
+            const nextValues = values.includes(value)
+                ? values.filter((currentValue) => currentValue !== value)
+                : [...values, value];
+
+            return {
+                ...current,
+                [key]: nextValues,
+            };
+        });
+    };
+
+    const resetFilters = () => {
+        setFilters(defaultFilters);
+    };
 
     const clearFilters = () => {
         setQuery("");
         setSortBy("reliability");
+        resetFilters();
     }
 
     return {
@@ -85,6 +137,11 @@ export function useArtifacts() {
         setQuery,
         sortBy,
         setSortBy,
+        filters,
+        setFilter,
+        toggleFilter,
+        resetFilters,
+        filterOptions,
         clearFilters
     };
 }

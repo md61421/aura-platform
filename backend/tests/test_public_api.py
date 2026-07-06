@@ -165,9 +165,41 @@ def test_list_artifacts_returns_active_tags_only():
     artifact = make_artifact()
     active_tag = Tag(id=uuid4(), name="motion", is_active=True)
     inactive_tag = Tag(id=uuid4(), name="old-tag", is_active=False)
+    image = Image(
+        id=uuid4(),
+        title="List image",
+        caption="A public list example.",
+        modality=Modality.ASL,
+        vendor="Siemens",
+        sequence="3D GRASE",
+        protocol="Demo protocol",
+        field_strength="3T",
+        visibility_status=ImageVisibilityStatus.APPROVED_PUBLIC,
+        reliability_score=9,
+    )
+    image.files = [
+        ImageFile(
+            id=uuid4(),
+            file_role=FileRole.THUMBNAIL,
+            file_type=FileType.PNG,
+            storage_provider=StorageProvider.LOCAL_DEV,
+            storage_bucket="approved",
+            storage_key="public/list-example.png",
+            public_url="http://testserver/uploads/public/list-example.png",
+            is_public=True,
+        )
+    ]
     artifact.tag_links = [
         ArtifactTag(id=uuid4(), artifact=artifact, tag=active_tag),
         ArtifactTag(id=uuid4(), artifact=artifact, tag=inactive_tag),
+    ]
+    artifact.image_links = [
+        ImageArtifact(
+            id=uuid4(),
+            artifact=artifact,
+            image=image,
+            relationship_type=ImageArtifactRelationshipType.PRIMARY,
+        )
     ]
     db = FakeReadSession(scalars_items=[artifact])
 
@@ -184,6 +216,9 @@ def test_list_artifacts_returns_active_tags_only():
     assert len(response) == 1
     assert response[0].title == "Motion artifact"
     assert response[0].tags == ["motion"]
+    assert response[0].created_at == artifact.created_at
+    assert response[0].images[0].reliability_score == 9
+    assert response[0].images[0].files[0].public_url == "http://testserver/uploads/public/list-example.png"
 
 
 def test_get_artifact_detail_returns_public_files_only():

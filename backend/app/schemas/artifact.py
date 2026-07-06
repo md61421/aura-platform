@@ -56,10 +56,10 @@ class ArtifactSummaryRead(BaseModel):
     default_modality: Modality
     status: ArtifactStatus
     tags: list[str] = Field(default_factory=list)
+    images: list[PublicImageSummaryRead] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
 
 
 class ArtifactDetailRead(ArtifactSummaryRead):
     remedies: list[dict[str, Any]] = Field(default_factory=list)
-    images: list[PublicImageSummaryRead] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
