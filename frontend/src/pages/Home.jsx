@@ -117,10 +117,6 @@ function Home() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-1 border-l border-gray-200 pl-4">
-                <button className="p-1.5 text-gray-300 hover:text-gray-900 transition-colors"><i className="fas fa-th-large"></i></button>
-                <button className="p-1.5 text-gray-300 hover:text-gray-900 transition-colors"><i className="fas fa-list"></i></button>
-              </div>
             </div>
           </div>
 
