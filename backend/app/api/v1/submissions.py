@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.dependencies import get_db_session, require_contributor
+from app.core.exceptions import bad_request_exception, forbidden_exception, not_found_exception
 from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag, User
 from app.db.models.enums import (
     ArtifactStatus,
@@ -29,6 +30,7 @@ from app.schemas.submission import (
     SubmittedArtifactRead,
     SubmittedImageRead,
     SubmissionReceiptRead,
+    SubmissionUpdate,
 )
 
 router = APIRouter()
@@ -152,7 +154,7 @@ def _storage_provider() -> StorageProvider:
 
 
 def _public_url_for_upload(request: Request, storage_key: str, file_type: FileType) -> str | None:
-    if file_type not in {FileType.JPG, FileType.PNG, FileType.NIFTI, FileType.NII_GZ}:
+    if file_type not in {FileType.JPG, FileType.PNG}:
         return None
     return str(request.url_for("local_upload", path=storage_key))
 
@@ -209,7 +211,7 @@ def _get_or_create_tag(
     if tag:
         return tag
 
-    tag = Tag(name=name, tag_type=tag_type, modality_scope=modality_scope)
+    tag = Tag(name=name, tag_type=tag_type, modality_scope=modality_scope, is_active=True)
     db.add(tag)
     return tag
 
@@ -223,7 +225,7 @@ def _primary_image_for_submission(submission: Submission) -> Image | None:
     return submission.images[0] if submission.images else None
 
 
-def _artifact_for_image(image: Image | None) -> Artifact | None:
+def _artifact_link_for_image(image: Image | None) -> ImageArtifact | None:
     if not image:
         return None
     primary_link = next(
@@ -234,12 +236,35 @@ def _artifact_for_image(image: Image | None) -> Artifact | None:
         ),
         None,
     )
-    link = primary_link or (image.artifact_links[0] if image.artifact_links else None)
+    return primary_link or (image.artifact_links[0] if image.artifact_links else None)
+
+
+def _artifact_for_image(image: Image | None) -> Artifact | None:
+    link = _artifact_link_for_image(image)
     return link.artifact if link else None
+
+
+def _artifact_tag_names(artifact: Artifact) -> list[str]:
+    return sorted(
+        tag_link.tag.name
+        for tag_link in artifact.tag_links
+        if tag_link.tag and tag_link.tag.is_active
+    )
+
+
+def _ordered_artifact_tag_names(artifact: Artifact, category_name: str | None) -> list[str]:
+    tag_names = _artifact_tag_names(artifact)
+    if not category_name:
+        return tag_names
+
+    ordered = [category_name]
+    ordered.extend(tag_name for tag_name in tag_names if tag_name.casefold() != category_name.casefold())
+    return ordered
 
 
 def _submission_summary(submission: Submission) -> MySubmissionRead:
     image = _primary_image_for_submission(submission)
+    artifact_link = _artifact_link_for_image(image)
     artifact = _artifact_for_image(image)
 
     return MySubmissionRead(
@@ -254,9 +279,15 @@ def _submission_summary(submission: Submission) -> MySubmissionRead:
             SubmittedArtifactRead(
                 id=artifact.id,
                 title=artifact.title,
+                explanation=artifact.explanation,
+                visual_description=artifact.visual_description,
+                remedies=artifact.remedies,
                 default_modality=artifact.default_modality,
                 status=artifact.status,
-                tags=[],
+                tags=_ordered_artifact_tag_names(
+                    artifact,
+                    artifact_link.note if artifact_link else None,
+                ),
             )
             if artifact
             else None
@@ -279,6 +310,73 @@ def _submission_summary(submission: Submission) -> MySubmissionRead:
     )
 
 
+def _submission_options():
+    return (
+        selectinload(Submission.images).selectinload(Image.files),
+        selectinload(Submission.images)
+        .selectinload(Image.artifact_links)
+        .selectinload(ImageArtifact.artifact)
+        .selectinload(Artifact.tag_links)
+        .selectinload(ArtifactTag.tag),
+    )
+
+
+def _get_owned_submission(db: Session, submission_id: UUID, current_user: User) -> Submission:
+    statement = (
+        select(Submission)
+        .where(Submission.id == submission_id)
+        .options(*_submission_options())
+    )
+    submission = db.scalar(statement)
+    if not submission:
+        raise not_found_exception("Submission")
+    if submission.submitted_by_id != current_user.id:
+        raise forbidden_exception("You can only manage your own submissions")
+    return submission
+
+
+def _replace_artifact_tags(
+    db: Session,
+    artifact: Artifact,
+    category_name: str,
+    symptom_names: list[str],
+    modality: Modality,
+) -> None:
+    category_tag = _get_or_create_tag(
+        db,
+        category_name,
+        TagType.ARTIFACT_CATEGORY,
+        Modality.ALL,
+    )
+    desired_tags = [category_tag]
+    for symptom_name in symptom_names:
+        desired_tags.append(
+            _get_or_create_tag(
+                db,
+                symptom_name,
+                TagType.VISUAL_SYMPTOM,
+                modality,
+            )
+        )
+
+    db.flush()
+
+    desired_tag_ids = {tag.id for tag in desired_tags}
+    artifact.tag_links[:] = [
+        tag_link
+        for tag_link in artifact.tag_links
+        if (tag_link.tag_id or (tag_link.tag.id if tag_link.tag else None)) in desired_tag_ids
+    ]
+
+    existing_tag_ids = {
+        tag_link.tag_id or (tag_link.tag.id if tag_link.tag else None)
+        for tag_link in artifact.tag_links
+    }
+    for tag in desired_tags:
+        if tag.id not in existing_tag_ids:
+            artifact.tag_links.append(ArtifactTag(tag=tag))
+
+
 @router.get("/me", response_model=list[MySubmissionRead])
 def list_my_submissions(
     current_user: Annotated[User, Depends(require_contributor)],
@@ -287,16 +385,150 @@ def list_my_submissions(
     statement = (
         select(Submission)
         .where(Submission.submitted_by_id == current_user.id)
-        .options(
-            selectinload(Submission.images).selectinload(Image.files),
-            selectinload(Submission.images)
-            .selectinload(Image.artifact_links)
-            .selectinload(ImageArtifact.artifact),
-        )
+        .options(*_submission_options())
         .order_by(Submission.created_at.desc())
     )
     rows = db.scalars(statement).unique().all()
     return [_submission_summary(submission) for submission in rows]
+
+
+@router.post("/{submission_id}/edit", response_model=MySubmissionRead)
+@router.patch("/{submission_id}", response_model=MySubmissionRead)
+def update_my_submission(
+    submission_id: UUID,
+    payload: SubmissionUpdate,
+    current_user: Annotated[User, Depends(require_contributor)],
+    db: Session = Depends(get_db_session),
+) -> MySubmissionRead:
+    submission = _get_owned_submission(db, submission_id, current_user)
+    image = _primary_image_for_submission(submission)
+    artifact = _artifact_for_image(image)
+
+    if not image or not artifact:
+        raise bad_request_exception("Submission is not linked to an editable artifact")
+    if artifact.status in {ArtifactStatus.ARCHIVED, ArtifactStatus.REJECTED}:
+        raise bad_request_exception("Removed artifacts cannot be edited")
+
+    artifact_name = _clean_label(payload.artifact_name, max_length=255)
+    description = _clean_text(payload.description)
+    if not description or len(description) < 10:
+        raise bad_request_exception("Add a description of at least 10 characters.")
+
+    category_name = _clean_label(payload.category)
+    symptom_names = [
+        _clean_label(symptom_name)
+        for symptom_name in payload.symptoms
+        if _clean_text(symptom_name)
+    ]
+    symptom_names = [
+        symptom_name
+        for symptom_name in symptom_names
+        if symptom_name.casefold() != category_name.casefold()
+    ]
+    deduped_symptoms: list[str] = []
+    seen_symptoms: set[str] = set()
+    for symptom_name in symptom_names:
+        key = symptom_name.casefold()
+        if key not in seen_symptoms:
+            seen_symptoms.add(key)
+            deduped_symptoms.append(symptom_name)
+
+    artifact.title = artifact_name
+    artifact.explanation = description
+    artifact.visual_description = description
+    artifact.default_modality = payload.modality
+    artifact.remedies = _remedies_from_text(payload.remedies)
+
+    image.title = artifact_name
+    image.caption = description
+    image.modality = payload.modality
+    image.vendor = _clean_text(payload.scanner)
+    image.sequence = _clean_text(payload.sequence)
+    image.protocol = _clean_text(payload.protocol)
+    image.field_strength = _clean_text(payload.field_strength)
+
+    _replace_artifact_tags(
+        db,
+        artifact,
+        category_name,
+        deduped_symptoms,
+        payload.modality,
+    )
+    artifact_link = _artifact_link_for_image(image)
+    if artifact_link:
+        artifact_link.note = category_name
+    submission.submitter_notes = json.dumps(
+        {
+            "category": category_name,
+            "symptoms": deduped_symptoms,
+        },
+        indent=2,
+    )
+
+    db.commit()
+    db.refresh(submission)
+    return _submission_summary(submission)
+
+
+@router.delete("/{submission_id}", response_model=MySubmissionRead)
+def withdraw_my_submission(
+    submission_id: UUID,
+    current_user: Annotated[User, Depends(require_contributor)],
+    db: Session = Depends(get_db_session),
+) -> MySubmissionRead:
+    submission = _get_owned_submission(db, submission_id, current_user)
+    image = _primary_image_for_submission(submission)
+    artifact = _artifact_for_image(image)
+
+    submission.status = SubmissionStatus.WITHDRAWN
+    if artifact:
+        artifact.status = ArtifactStatus.ARCHIVED
+    if image:
+        image.visibility_status = ImageVisibilityStatus.ARCHIVED
+        for image_file in image.files:
+            image_file.is_public = False
+            image_file.public_url = None
+
+    db.commit()
+    db.refresh(submission)
+    return _submission_summary(submission)
+
+
+@router.post("/{submission_id}/republish", response_model=MySubmissionRead)
+def republish_my_submission(
+    submission_id: UUID,
+    request: Request,
+    current_user: Annotated[User, Depends(require_contributor)],
+    db: Session = Depends(get_db_session),
+) -> MySubmissionRead:
+    submission = _get_owned_submission(db, submission_id, current_user)
+    image = _primary_image_for_submission(submission)
+    artifact = _artifact_for_image(image)
+
+    if not image or not artifact:
+        raise bad_request_exception("Submission is not linked to a publishable artifact")
+    if artifact.status not in {ArtifactStatus.ARCHIVED, ArtifactStatus.DRAFT, ArtifactStatus.REJECTED}:
+        raise bad_request_exception("Only draft or removed artifacts can be published")
+
+    submission.status = SubmissionStatus.APPROVED
+    artifact.status = ArtifactStatus.COMMUNITY_PUBLISHED
+    image.visibility_status = ImageVisibilityStatus.APPROVED_PUBLIC
+
+    for image_file in image.files:
+        if image_file.file_type in {FileType.JPG, FileType.PNG}:
+            image_file.public_url = _public_url_for_upload(
+                request,
+                image_file.storage_key,
+                image_file.file_type,
+            )
+            image_file.is_public = image_file.public_url is not None
+        else:
+            image_file.is_public = False
+            image_file.public_url = None
+
+    db.commit()
+    db.refresh(submission)
+    return _submission_summary(submission)
 
 
 @router.post("", response_model=SubmissionReceiptRead, status_code=status.HTTP_201_CREATED)
@@ -319,6 +551,7 @@ def create_submission(
     remedies: Annotated[str | None, Form()] = None,
     references: Annotated[str | None, Form()] = None,
     submitter_notes: Annotated[str | None, Form()] = None,
+    save_as_draft: Annotated[bool, Form()] = False,
     db: Session = Depends(get_db_session),
 ):
     email = contact_email.strip().lower()
@@ -351,7 +584,7 @@ def create_submission(
     ]
     remedy_payload = _remedies_from_text(remedies)
     reference_lines = _parse_lines(references)
-    publish_immediately = True
+    publish_immediately = not save_as_draft
 
     saved_paths: list[Path] = []
     stored_file_rows: list[tuple[ImageFile, str]] = []
@@ -397,7 +630,7 @@ def create_submission(
         visibility_status=(
             ImageVisibilityStatus.APPROVED_PUBLIC
             if publish_immediately
-            else ImageVisibilityStatus.PENDING_REVIEW
+            else ImageVisibilityStatus.PRIVATE_STAGING
         ),
     )
     image.artifact_links.append(

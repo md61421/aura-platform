@@ -107,6 +107,7 @@ function Submission() {
   const [tagInput, setTagInput] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitAction, setSubmitAction] = useState("publish");
   const [formError, setFormError] = useState("");
   const [receipt, setReceipt] = useState(null);
 
@@ -202,6 +203,7 @@ function Submission() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const action = event.nativeEvent.submitter?.value || "publish";
     if (authLoading) {
       setFormError("Checking your sign-in status. Try again in a moment.");
       return;
@@ -220,12 +222,14 @@ function Submission() {
       return;
     }
 
+    setSubmitAction(action);
     setSubmitting(true);
     setFormError("");
 
     try {
       const submissionReceipt = await createSubmission({
         ...payload,
+        saveAsDraft: action === "draft",
         files,
       });
       setForm((current) => ({ ...current, symptoms: symptomsForSubmit }));
@@ -256,20 +260,28 @@ function Submission() {
   }
 
   if (receipt) {
+    const isDraft = receipt.artifact?.status === "draft";
+
     return (
       <div id="submit-success" className="py-12 text-center animate-fade-in max-w-4xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <i className="fas fa-check text-3xl text-green-600"></i>
         </div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">Submission Received!</h3>
-        <p className="text-gray-500 max-w-sm mx-auto mb-8">Your artifact is published to the community and linked to your account.</p>
+        <h3 className="text-2xl font-bold text-gray-900 mb-2">
+          {isDraft ? "Draft Saved" : "Submission Received!"}
+        </h3>
+        <p className="text-gray-500 max-w-sm mx-auto mb-8">
+          {isDraft
+            ? "Your artifact draft is saved and visible in My Submissions."
+            : "Your artifact is published to the community and linked to your account."}
+        </p>
         <p className="text-xs text-gray-400 max-w-sm mx-auto mb-8">Receipt ID: {receipt.id}</p>
         <div className="flex flex-col sm:flex-row justify-center gap-3">
           <button onClick={resetForm} className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-8 rounded-xl transition-colors shadow-lg shadow-brand-500/30" type="button">
             Submit Another
           </button>
-          <Link to={`/artifact/${receipt.artifact?.id}`} className="bg-white border border-gray-300 text-gray-700 py-3 px-8 rounded-xl font-medium hover:bg-gray-50 transition-colors text-center">
-            View Artifact
+          <Link to={isDraft ? "/profile" : `/artifact/${receipt.artifact?.id}`} className="bg-white border border-gray-300 text-gray-700 py-3 px-8 rounded-xl font-medium hover:bg-gray-50 transition-colors text-center">
+            {isDraft ? "Go to My Submissions" : "View Artifact"}
           </Link>
         </div>
       </div>
@@ -582,16 +594,25 @@ function Submission() {
             </div>
           </div>
 
-          <div className="pt-5 flex justify-end">
+          <div className="pt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
             <Link to="/" className="bg-white border border-gray-300 text-gray-700 py-3 px-6 rounded-xl font-medium hover:bg-gray-50 transition-colors mr-4 text-center">
               Cancel
             </Link>
             <button
               type="submit"
+              value="draft"
+              disabled={submitting}
+              className="bg-white border border-gray-300 text-gray-700 font-medium py-3 px-6 rounded-xl shadow-sm transition-colors hover:bg-gray-50 active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {submitting && submitAction === "draft" ? "Saving..." : "Save as Draft"} <i className={`fas ${submitting && submitAction === "draft" ? "fa-spinner fa-spin" : "fa-save"}`}></i>
+            </button>
+            <button
+              type="submit"
+              value="publish"
               disabled={submitting}
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-6 rounded-xl ml-3 shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {submitting ? "Submitting..." : "Publish Artifact"} <i className={`fas ${submitting ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
+              {submitting && submitAction === "publish" ? "Publishing..." : "Publish Artifact"} <i className={`fas ${submitting && submitAction === "publish" ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
                     </button>
                 </div>
             </form>

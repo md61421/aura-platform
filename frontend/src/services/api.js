@@ -320,6 +320,33 @@ export const fetchCurrentUser = async () => requestJson("/auth/me");
 
 export const fetchMySubmissions = async () => requestJson("/submissions/me");
 
+export const updateMySubmission = async (submissionId, payload) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}/edit`, {
+        method: "POST",
+        body: JSON.stringify({
+            artifact_name: payload.artifactName,
+            modality: payload.modality,
+            category: payload.category,
+            description: payload.description,
+            scanner: payload.scanner,
+            sequence: payload.sequence,
+            protocol: payload.protocol,
+            field_strength: payload.fieldStrength,
+            symptoms: payload.symptoms || [],
+            remedies: payload.remedies,
+        }),
+    });
+
+export const withdrawMySubmission = async (submissionId) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}`, {
+        method: "DELETE",
+    });
+
+export const republishMySubmission = async (submissionId) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}/republish`, {
+        method: "POST",
+    });
+
 export const moderateArtifact = async (artifactId, action, reviewNote = "") => {
     const paths = {
         archive: `/admin/artifacts/${encodeURIComponent(artifactId)}/archive`,
@@ -357,6 +384,7 @@ export const createSubmission = async ({
     submitterNotes,
     permissionConfirmed,
     pseudonymisationConfirmed,
+    saveAsDraft = false,
     files,
 }) => {
     const formData = new FormData();
@@ -376,6 +404,7 @@ export const createSubmission = async ({
         submitter_notes: submitterNotes,
         permission_confirmed: permissionConfirmed ? "true" : "false",
         pseudonymisation_confirmed: pseudonymisationConfirmed ? "true" : "false",
+        save_as_draft: saveAsDraft ? "true" : "false",
     };
 
     Object.entries(fields).forEach(([key, value]) => {

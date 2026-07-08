@@ -29,6 +29,9 @@ class SubmissionRead(SubmissionCreate):
 class SubmittedArtifactRead(BaseModel):
     id: UUID
     title: str
+    explanation: str | None = None
+    visual_description: str | None = None
+    remedies: list[dict] = Field(default_factory=list)
     default_modality: Modality
     status: ArtifactStatus
     tags: list[str] = Field(default_factory=list)
@@ -70,3 +73,16 @@ class MySubmissionRead(BaseModel):
     artifact: SubmittedArtifactRead | None = None
     image: SubmittedImageRead | None = None
     file_count: int = 0
+
+
+class SubmissionUpdate(BaseModel):
+    artifact_name: str
+    modality: Modality
+    category: str
+    description: str
+    scanner: str | None = None
+    sequence: str | None = None
+    protocol: str | None = None
+    field_strength: str | None = None
+    symptoms: list[str] = Field(default_factory=list)
+    remedies: str | None = None
