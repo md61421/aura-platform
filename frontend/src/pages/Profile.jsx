@@ -6,20 +6,20 @@ import { fetchMySubmissions } from "../services/api";
 
 const STATUS_META = {
   approved: {
-    className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    label: "Approved",
+    className: "bg-blue-50 text-blue-700 ring-blue-200",
+    label: "Submitted",
   },
   needs_changes: {
     className: "bg-amber-50 text-amber-700 ring-amber-200",
-    label: "Needs Changes",
+    label: "Flagged",
   },
   pending_review: {
-    className: "bg-blue-50 text-blue-700 ring-blue-200",
-    label: "Pending Review",
+    className: "bg-slate-100 text-slate-700 ring-slate-200",
+    label: "Submitted",
   },
   rejected: {
     className: "bg-red-50 text-red-700 ring-red-200",
-    label: "Rejected",
+    label: "Removed",
   },
   withdrawn: {
     className: "bg-slate-100 text-slate-700 ring-slate-200",
@@ -28,12 +28,34 @@ const STATUS_META = {
 };
 
 const ARTIFACT_STATUS_META = {
-  archived: "Archived",
-  community_published: "Community Published",
-  draft: "Draft",
-  flagged: "Flagged",
-  osipi_verified: "OSIPI Verified",
-  rejected: "Rejected",
+  approved: {
+    className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    label: "Live",
+  },
+  archived: {
+    className: "bg-slate-100 text-slate-700 ring-slate-200",
+    label: "Archived",
+  },
+  community_published: {
+    className: "bg-blue-50 text-blue-700 ring-blue-200",
+    label: "Live",
+  },
+  draft: {
+    className: "bg-gray-50 text-gray-700 ring-gray-200",
+    label: "Draft",
+  },
+  flagged: {
+    className: "bg-amber-50 text-amber-700 ring-amber-200",
+    label: "Flagged",
+  },
+  osipi_verified: {
+    className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    label: "OSIPI Verified",
+  },
+  rejected: {
+    className: "bg-red-50 text-red-700 ring-red-200",
+    label: "Removed",
+  },
 };
 
 const publicArtifactStatuses = new Set(["community_published", "osipi_verified", "approved"]);
@@ -71,6 +93,19 @@ function StatusBadge({ status }) {
   );
 }
 
+function ArtifactStatusBadge({ status }) {
+  const meta = ARTIFACT_STATUS_META[status] || {
+    className: "bg-gray-50 text-gray-700 ring-gray-200",
+    label: status || "Not linked",
+  };
+
+  return (
+    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ring-1 ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
+}
+
 function StatTile({ label, value, tone = "text-gray-900" }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -88,7 +123,7 @@ function EmptyState() {
       </div>
       <h3 className="text-lg font-bold text-gray-900">No submissions yet</h3>
       <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
-        Your submitted artifacts will appear here after you publish them.
+        Artifacts you publish to AURA will appear here.
       </p>
       <Link
         className="mt-6 inline-flex rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:bg-brand-700"
@@ -141,15 +176,25 @@ const Profile = () => {
 
   const stats = useMemo(() => {
     const total = submissions.length;
-    const approved = submissions.filter((submission) => submission.status === "approved").length;
-    const needsChanges = submissions.filter((submission) => submission.status === "needs_changes").length;
-    const rejected = submissions.filter((submission) => submission.status === "rejected").length;
+    const live = submissions.filter((submission) =>
+      ["approved", "community_published"].includes(submission.artifact?.status)
+    ).length;
+    const verified = submissions.filter(
+      (submission) => submission.artifact?.status === "osipi_verified"
+    ).length;
+    const flagged = submissions.filter(
+      (submission) => submission.artifact?.status === "flagged"
+    ).length;
+    const removed = submissions.filter((submission) =>
+      ["archived", "rejected"].includes(submission.artifact?.status)
+    ).length;
 
     return {
-      approved,
-      needsChanges,
-      rejected,
+      flagged,
+      live,
+      removed,
       total,
+      verified,
     };
   }, [submissions]);
 
@@ -174,7 +219,7 @@ const Profile = () => {
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">My Submissions</h2>
-          <p className="text-gray-500">Track artifacts published from your AURA account.</p>
+          <p className="text-gray-500">Track artifacts you have published to AURA.</p>
         </div>
         <div className="flex flex-col items-start gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center">
           <span className="max-w-72 truncate text-sm font-semibold text-gray-800">
@@ -194,9 +239,9 @@ const Profile = () => {
 
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatTile label="Total" value={stats.total} />
-        <StatTile label="Approved" tone="text-emerald-600" value={stats.approved} />
-        <StatTile label="Needs Changes" tone="text-amber-500" value={stats.needsChanges} />
-        <StatTile label="Rejected" tone="text-red-600" value={stats.rejected} />
+        <StatTile label="Live" tone="text-blue-600" value={stats.live} />
+        <StatTile label="Verified" tone="text-emerald-600" value={stats.verified} />
+        <StatTile label="Flagged/Removed" tone="text-amber-600" value={stats.flagged + stats.removed} />
       </div>
 
       <div className="mb-5 flex justify-end">
@@ -231,10 +276,10 @@ const Profile = () => {
               <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
                   <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Artifact</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Listing</th>
                   <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Submission</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Artifact Status</th>
                   <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Files</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Date</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase text-gray-500">Published</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -261,10 +306,10 @@ const Profile = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <StatusBadge status={submission.status} />
+                        <ArtifactStatusBadge status={artifact?.status} />
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-600">
-                        {ARTIFACT_STATUS_META[artifact?.status] || artifact?.status || "Not linked"}
+                      <td className="px-6 py-4">
+                        <StatusBadge status={submission.status} />
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">{submission.file_count}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">
