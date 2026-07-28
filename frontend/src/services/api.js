@@ -253,6 +253,25 @@ const mapArtifact = (artifact) => {
         examples,
         thumbnail_url: examples[0] || null,
         modality: defaultModality,
+        modality_metadata:
+            artifact.modality_metadata && Object.keys(artifact.modality_metadata).length > 0
+                ? artifact.modality_metadata
+                : asArray(artifact.remedies).find((r) => r && r.stage === "modality_metadata")?.data ||
+                  (defaultModality === "ASL"
+                      ? {
+                            labeling_time: "1800 ms",
+                            pld: "2000 ms",
+                            readout: "3D GRASE",
+                            labeling_strategy: "PCASL",
+                        }
+                      : defaultModality === "DSC"
+                      ? {
+                            te: "30 ms",
+                            tr: "1500 ms",
+                            flip_angle: "60 deg",
+                            contrast_agent: "Gadolinium-based",
+                        }
+                      : {}),
         scanner: firstText(image?.vendor, "Unknown vendor"),
         vendor: image?.vendor || null,
         sequence: firstText(image?.sequence, "Not specified"),
@@ -271,19 +290,24 @@ const mapArtifact = (artifact) => {
 const requestJson = async (path, options = {}) => {
     const accessToken = await getAccessToken();
     const isFormData = options.body instanceof FormData;
+    const isObjectBody = !isFormData && options.body && typeof options.body === "object";
+
     const headers = {
         Accept: "application/json",
-        ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
+        ...(isObjectBody ? { "Content-Type": "application/json" } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(options.headers || {}),
     };
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const fetchOptions = {
         ...options,
         headers,
-    });
+        ...(isObjectBody ? { body: JSON.stringify(options.body) } : {}),
+    };
 
-    if (response.status === 404) {
+    const response = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
+
+    if (response.status === 404 || response.status === 204) {
         return null;
     }
     if (!response.ok) {
@@ -319,6 +343,33 @@ export const fetchArtifactById = async (id) => {
 export const fetchCurrentUser = async () => requestJson("/auth/me");
 
 export const fetchMySubmissions = async () => requestJson("/submissions/me");
+
+export const updateMySubmission = async (submissionId, payload) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}/edit`, {
+        method: "POST",
+        body: JSON.stringify({
+            artifact_name: payload.artifactName,
+            modality: payload.modality,
+            category: payload.category,
+            description: payload.description,
+            scanner: payload.scanner,
+            sequence: payload.sequence,
+            protocol: payload.protocol,
+            field_strength: payload.fieldStrength,
+            symptoms: payload.symptoms || [],
+            remedies: payload.remedies,
+        }),
+    });
+
+export const withdrawMySubmission = async (submissionId) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}`, {
+        method: "DELETE",
+    });
+
+export const republishMySubmission = async (submissionId) =>
+    requestJson(`/submissions/${encodeURIComponent(submissionId)}/republish`, {
+        method: "POST",
+    });
 
 export const moderateArtifact = async (artifactId, action, reviewNote = "") => {
     const paths = {
@@ -357,7 +408,9 @@ export const createSubmission = async ({
     submitterNotes,
     permissionConfirmed,
     pseudonymisationConfirmed,
+    saveAsDraft = false,
     files,
+    modalityMetadata,
 }) => {
     const formData = new FormData();
     const fields = {
@@ -374,9 +427,12 @@ export const createSubmission = async ({
         remedies,
         references,
         submitter_notes: submitterNotes,
+        modality_metadata: JSON.stringify(modalityMetadata || {}),
         permission_confirmed: permissionConfirmed ? "true" : "false",
         pseudonymisation_confirmed: pseudonymisationConfirmed ? "true" : "false",
+        save_as_draft: saveAsDraft ? "true" : "false",
     };
+
 
     Object.entries(fields).forEach(([key, value]) => {
         if (isPresent(value)) {
@@ -393,3 +449,29 @@ export const createSubmission = async ({
         body: formData,
     });
 };
+
+export const fetchMetadataSchema = async (modality) => {
+    const query = modality ? `?modality=${encodeURIComponent(modality)}` : "";
+    return requestJson(`/metadata-schema${query}`);
+};
+
+export const createMetadataField = async (fieldPayload) => {
+    return requestJson("/metadata-schema", {
+        method: "POST",
+        body: fieldPayload,
+    });
+};
+
+export const updateMetadataField = async (fieldId, fieldPayload) => {
+    return requestJson(`/metadata-schema/${fieldId}`, {
+        method: "PUT",
+        body: fieldPayload,
+    });
+};
+
+export const deleteMetadataField = async (fieldId) => {
+    return requestJson(`/metadata-schema/${fieldId}`, {
+        method: "DELETE",
+    });
+};
+

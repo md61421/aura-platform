@@ -20,6 +20,7 @@ from app.db.models.enums import (
     SubmissionStatus,
     UserRole,
 )
+from app.schemas.submission import SubmissionUpdate
 
 
 class FakeScalarResult:
@@ -84,6 +85,39 @@ class FakeWriteSession:
         self.rolled_back = True
 
 
+class FakeSubmissionManageSession:
+    def __init__(self, submission, scalar_items_after_submission=None):
+        self.submission = submission
+        self.scalar_items_after_submission = list(scalar_items_after_submission or [])
+        self.added = []
+        self.committed = False
+        self.scalar_calls = 0
+
+    def scalar(self, statement):
+        self.scalar_calls += 1
+        if self.scalar_calls == 1:
+            return self.submission
+        if self.scalar_items_after_submission:
+            return self.scalar_items_after_submission.pop(0)
+        return None
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    def flush(self):
+        for obj in self.added:
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = uuid4()
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, obj):
+        now = datetime.now(UTC)
+        if hasattr(obj, "updated_at"):
+            obj.updated_at = now
+
+
 class FakeRequest:
     def url_for(self, name, **path_params):
         assert name == "local_upload"
@@ -139,6 +173,7 @@ def valid_submission_kwargs(**overrides):
         "remedies": None,
         "references": None,
         "submitter_notes": None,
+        "save_as_draft": False,
         "current_user": make_user(),
         "db": FakeWriteSession(),
     }
@@ -345,6 +380,44 @@ def test_create_submission_attaches_logged_in_user(monkeypatch):
     assert submission.submitted_by_id == current_user.id
 
 
+def test_create_submission_can_save_private_draft(monkeypatch, tmp_path):
+    db = FakeWriteSession()
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
+
+    response = submissions.create_submission(
+        **valid_submission_kwargs(
+            db=db,
+            files=[make_upload("draft.png")],
+            save_as_draft=True,
+        )
+    )
+
+    assert response["status"].value == "pending_review"
+    assert response["artifact"]["status"].value == "draft"
+    assert response["image"]["visibility_status"].value == "private_staging"
+    image_file = next(obj for obj in db.objects if isinstance(obj, ImageFile))
+    assert image_file.is_public is False
+    assert image_file.public_url is None
+    assert db.committed is True
+
+
+def test_create_submission_does_not_publish_nifti_files(monkeypatch, tmp_path):
+    db = FakeWriteSession()
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
+
+    submissions.create_submission(
+        **valid_submission_kwargs(
+            db=db,
+            files=[make_upload("volume.nii", b"nifti-bytes")],
+        )
+    )
+
+    image_file = next(obj for obj in db.objects if isinstance(obj, ImageFile))
+    assert image_file.file_type == FileType.NIFTI
+    assert image_file.is_public is False
+    assert image_file.public_url is None
+
+
 def test_submission_route_requires_authenticated_contributor():
     route = next(route for route in submissions.router.routes if route.path == "")
     dependency_names = {
@@ -365,6 +438,13 @@ def test_my_submissions_route_requires_authenticated_contributor():
     }
 
     assert "require_contributor" in dependency_names
+
+
+def test_my_submission_edit_routes_are_registered():
+    routes_by_path = {route.path: route for route in submissions.router.routes}
+
+    assert "/{submission_id}/edit" in routes_by_path
+    assert "/{submission_id}" in routes_by_path
 
 
 def test_list_my_submissions_returns_current_user_items():
@@ -425,6 +505,231 @@ def test_list_my_submissions_returns_current_user_items():
     assert response[0].artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
     assert response[0].image.vendor == "Siemens"
     assert response[0].file_count == 1
+
+
+def make_manageable_submission(user):
+    now = datetime.now(UTC)
+    submission = Submission(
+        id=uuid4(),
+        submitted_by_id=user.id,
+        contact_email=user.email,
+        status=SubmissionStatus.APPROVED,
+        permission_confirmed=True,
+        pseudonymisation_confirmed=True,
+        submitted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    artifact = make_artifact(
+        title="Submitted artifact",
+        status=ArtifactStatus.COMMUNITY_PUBLISHED,
+        created_at=now,
+        updated_at=now,
+    )
+    tag = Tag(id=uuid4(), name="Motion", is_active=True)
+    artifact.tag_links = [ArtifactTag(id=uuid4(), artifact=artifact, tag=tag)]
+    image = Image(
+        id=uuid4(),
+        title="Submitted image",
+        caption="Old description",
+        modality=Modality.ASL,
+        vendor="Siemens",
+        visibility_status=ImageVisibilityStatus.APPROVED_PUBLIC,
+    )
+    image.files = [
+        ImageFile(
+            id=uuid4(),
+            file_role=FileRole.OTHER,
+            file_type=FileType.PNG,
+            storage_provider=StorageProvider.LOCAL_DEV,
+            storage_bucket="private",
+            storage_key="submissions/example.png",
+            public_url="http://testserver/uploads/submissions/example.png",
+            is_public=True,
+        )
+    ]
+    image.artifact_links = [
+        ImageArtifact(
+            id=uuid4(),
+            image=image,
+            artifact=artifact,
+            relationship_type=ImageArtifactRelationshipType.PRIMARY,
+        )
+    ]
+    submission.images = [image]
+    return submission, artifact, image
+
+
+def test_update_my_submission_edits_owned_public_artifact():
+    user = make_user()
+    submission, artifact, image = make_manageable_submission(user)
+    db = FakeSubmissionManageSession(submission)
+
+    response = submissions.update_my_submission(
+        submission.id,
+        SubmissionUpdate(
+            artifact_name="Updated artifact",
+            modality=Modality.DSC,
+            category="Flow",
+            description="Updated artifact description.",
+            scanner="GE",
+            sequence="EPI",
+            protocol="Updated protocol",
+            field_strength="3T",
+            symptoms=["ghosting", "Flow"],
+            remedies="Repeat acquisition.",
+        ),
+        current_user=user,
+        db=db,
+    )
+
+    assert artifact.title == "Updated artifact"
+    assert artifact.default_modality == Modality.DSC
+    assert artifact.explanation == "Updated artifact description."
+    assert artifact.remedies == [{"stage": "contributor", "text": "Repeat acquisition."}]
+    assert image.title == "Updated artifact"
+    assert image.vendor == "GE"
+    assert image.sequence == "EPI"
+    assert response.artifact.title == "Updated artifact"
+    assert response.artifact.tags == ["Flow", "ghosting"]
+    assert db.committed is True
+
+
+def test_update_my_submission_reuses_existing_tag_links():
+    user = make_user()
+    submission, artifact, _image = make_manageable_submission(user)
+    original_tag_link = artifact.tag_links[0]
+    db = FakeSubmissionManageSession(
+        submission,
+        scalar_items_after_submission=[original_tag_link.tag],
+    )
+
+    response = submissions.update_my_submission(
+        submission.id,
+        SubmissionUpdate(
+            artifact_name="Updated artifact",
+            modality=Modality.ASL,
+            category="Motion",
+            description="Updated artifact description.",
+            scanner="Siemens",
+            symptoms=[],
+        ),
+        current_user=user,
+        db=db,
+    )
+
+    assert artifact.tag_links[0] is original_tag_link
+    assert response.artifact.tags == ["Motion"]
+    assert db.committed is True
+
+
+def test_update_my_submission_rejects_other_user():
+    owner = make_user()
+    other_user = make_user()
+    submission, _artifact, _image = make_manageable_submission(owner)
+    db = FakeSubmissionManageSession(submission)
+
+    with pytest.raises(HTTPException) as exc_info:
+        submissions.update_my_submission(
+            submission.id,
+            SubmissionUpdate(
+                artifact_name="Updated artifact",
+                modality=Modality.ASL,
+                category="Motion",
+                description="Updated artifact description.",
+            ),
+            current_user=other_user,
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert db.committed is False
+
+
+def test_withdraw_my_submission_archives_artifact_and_private_files():
+    user = make_user()
+    submission, artifact, image = make_manageable_submission(user)
+    db = FakeSubmissionManageSession(submission)
+
+    response = submissions.withdraw_my_submission(
+        submission.id,
+        current_user=user,
+        db=db,
+    )
+
+    assert submission.status == SubmissionStatus.WITHDRAWN
+    assert artifact.status == ArtifactStatus.ARCHIVED
+    assert image.visibility_status == ImageVisibilityStatus.ARCHIVED
+    assert image.files[0].is_public is False
+    assert image.files[0].public_url is None
+    assert response.status == SubmissionStatus.WITHDRAWN
+    assert response.artifact.status == ArtifactStatus.ARCHIVED
+    assert db.committed is True
+
+
+def test_republish_my_submission_restores_public_image_files_only():
+    user = make_user()
+    submission, artifact, image = make_manageable_submission(user)
+    submission.status = SubmissionStatus.WITHDRAWN
+    artifact.status = ArtifactStatus.ARCHIVED
+    image.visibility_status = ImageVisibilityStatus.ARCHIVED
+    image.files[0].is_public = False
+    image.files[0].public_url = None
+    image.files.append(
+        ImageFile(
+            id=uuid4(),
+            file_role=FileRole.OTHER,
+            file_type=FileType.NIFTI,
+            storage_provider=StorageProvider.LOCAL_DEV,
+            storage_bucket="private",
+            storage_key="submissions/example.nii",
+            public_url=None,
+            is_public=False,
+        )
+    )
+    db = FakeSubmissionManageSession(submission)
+
+    response = submissions.republish_my_submission(
+        submission.id,
+        FakeRequest(),
+        current_user=user,
+        db=db,
+    )
+
+    assert submission.status == SubmissionStatus.APPROVED
+    assert artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
+    assert image.files[0].is_public is True
+    assert image.files[0].public_url == "http://testserver/uploads/submissions/example.png"
+    assert image.files[1].is_public is False
+    assert image.files[1].public_url is None
+    assert response.status == SubmissionStatus.APPROVED
+    assert response.artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert db.committed is True
+
+
+def test_republish_my_submission_publishes_draft():
+    user = make_user()
+    submission, artifact, image = make_manageable_submission(user)
+    submission.status = SubmissionStatus.PENDING_REVIEW
+    artifact.status = ArtifactStatus.DRAFT
+    image.visibility_status = ImageVisibilityStatus.PRIVATE_STAGING
+    image.files[0].is_public = False
+    image.files[0].public_url = None
+    db = FakeSubmissionManageSession(submission)
+
+    response = submissions.republish_my_submission(
+        submission.id,
+        FakeRequest(),
+        current_user=user,
+        db=db,
+    )
+
+    assert submission.status == SubmissionStatus.APPROVED
+    assert artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
+    assert image.files[0].is_public is True
+    assert response.artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
 
 
 @pytest.mark.parametrize(
