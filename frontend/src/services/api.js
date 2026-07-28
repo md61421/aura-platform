@@ -1,7 +1,12 @@
 import { supabase } from "../lib/supabase";
 
+const defaultHost =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? "localhost"
+        : "127.0.0.1";
+
 const API_BASE_URL = (
-    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"
+    import.meta.env.VITE_API_BASE_URL || `http://${defaultHost}:8000/api/v1`
 ).replace(/\/$/, "");
 
 const UNKNOWN = "Unknown";
@@ -290,11 +295,12 @@ const mapArtifact = (artifact) => {
 const requestJson = async (path, options = {}) => {
     const accessToken = await getAccessToken();
     const isFormData = options.body instanceof FormData;
-    const isObjectBody = !isFormData && options.body && typeof options.body === "object";
+    const isJsonBody = !isFormData && options.body !== undefined && options.body !== null;
+    const isObjectBody = isJsonBody && typeof options.body === "object";
 
     const headers = {
         Accept: "application/json",
-        ...(isObjectBody ? { "Content-Type": "application/json" } : {}),
+        ...(isJsonBody ? { "Content-Type": "application/json" } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(options.headers || {}),
     };
@@ -409,7 +415,7 @@ export const createSubmission = async ({
     permissionConfirmed,
     pseudonymisationConfirmed,
     saveAsDraft = false,
-    files,
+    files = [],
     modalityMetadata,
 }) => {
     const formData = new FormData();
@@ -433,15 +439,16 @@ export const createSubmission = async ({
         save_as_draft: saveAsDraft ? "true" : "false",
     };
 
-
     Object.entries(fields).forEach(([key, value]) => {
         if (isPresent(value)) {
             formData.append(key, value);
         }
     });
 
-    files.forEach((file) => {
-        formData.append("files", file);
+    asArray(files).forEach((file) => {
+        if (file instanceof File || file instanceof Blob) {
+            formData.append("files", file, file.name || "upload");
+        }
     });
 
     return requestJson("/submissions", {
