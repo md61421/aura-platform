@@ -1,12 +1,18 @@
 import { supabase } from "../lib/supabase";
 
-const defaultHost =
-    typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "localhost"
-        : "127.0.0.1";
+const getFallbackApiBaseUrl = () => {
+    if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
+        return "https://aura-platform-chi.vercel.app/api/v1";
+    }
+    const defaultHost =
+        typeof window !== "undefined" && window.location.hostname === "localhost"
+            ? "localhost"
+            : "127.0.0.1";
+    return `http://${defaultHost}:8000/api/v1`;
+};
 
 const API_BASE_URL = (
-    import.meta.env.VITE_API_BASE_URL || `http://${defaultHost}:8000/api/v1`
+    import.meta.env.VITE_API_BASE_URL || getFallbackApiBaseUrl()
 ).replace(/\/$/, "");
 
 const UNKNOWN = "Unknown";

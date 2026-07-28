@@ -143,7 +143,15 @@ def _storage_root() -> Path:
     root = Path(settings.LOCAL_STORAGE_ROOT)
     if not root.is_absolute():
         root = Path.cwd() / root
-    return root
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    except (OSError, PermissionError):
+        import tempfile
+
+        temp_root = Path(tempfile.gettempdir()) / "aura_uploads"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        return temp_root
 
 
 def _storage_provider() -> StorageProvider:
@@ -156,7 +164,11 @@ def _storage_provider() -> StorageProvider:
 def _public_url_for_upload(request: Request, storage_key: str, file_type: FileType) -> str | None:
     if file_type not in {FileType.JPG, FileType.PNG}:
         return None
-    return str(request.url_for("local_upload", path=storage_key))
+    try:
+        return str(request.url_for("local_upload", path=storage_key))
+    except Exception:
+        base_url = str(request.base_url).rstrip("/")
+        return f"{base_url}/uploads/{storage_key}"
 
 
 def _store_upload(upload: UploadFile, submission_id: UUID) -> tuple[str, int, str, Path]:

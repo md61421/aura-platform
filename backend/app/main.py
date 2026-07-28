@@ -24,16 +24,22 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
-    if settings.DEBUG or settings.DEV_AUTO_APPROVE_SUBMISSIONS:
-        upload_root = Path(settings.LOCAL_STORAGE_ROOT)
-        if not upload_root.is_absolute():
-            upload_root = Path.cwd() / upload_root
+    upload_root = Path(settings.LOCAL_STORAGE_ROOT)
+    if not upload_root.is_absolute():
+        upload_root = Path.cwd() / upload_root
+    try:
         upload_root.mkdir(parents=True, exist_ok=True)
-        app.mount(
-            "/uploads",
-            StaticFiles(directory=upload_root),
-            name="local_upload",
-        )
+    except (OSError, PermissionError):
+        import tempfile
+
+        upload_root = Path(tempfile.gettempdir()) / "aura_uploads"
+        upload_root.mkdir(parents=True, exist_ok=True)
+
+    app.mount(
+        "/uploads",
+        StaticFiles(directory=upload_root),
+        name="local_upload",
+    )
 
     @app.get("/")
     def root():
