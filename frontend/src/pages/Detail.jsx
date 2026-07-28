@@ -249,7 +249,61 @@ function Detail() {
               </div>
             </div>
 
+            {artifact.modality_metadata && Object.keys(artifact.modality_metadata).length > 0 && (
+              <div className="mb-8">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
+                  Technique Metadata ({artifact.modality})
+                </h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-slate-50 p-4 rounded-xl border border-gray-100">
+                  {Object.entries(artifact.modality_metadata).map(([metaKey, metaVal]) => {
+                    const labelMap = {
+                      labeling_time: "Labeling Time",
+                      labelingTime: "Labeling Time",
+                      pld: "PLD (Post-Labeling Delay)",
+                      readout: "Readout Sequence",
+                      labeling_strategy: "Labeling Strategy",
+                      labelingStrategy: "Labeling Strategy",
+                      te: "Echo Time (TE)",
+                      tr: "Repetition Time (TR)",
+                      flip_angle: "Flip Angle",
+                      flipAngle: "Flip Angle",
+                      contrast_agent: "Contrast Agent",
+                      contrastAgent: "Contrast Agent",
+                      temporal_res: "Temporal Resolution",
+                      temporalRes: "Temporal Resolution",
+                      injection_rate: "Injection Rate",
+                      injectionRate: "Injection Rate",
+                      contrast_volume: "Contrast Volume",
+                      contrastVolume: "Contrast Volume",
+                      b_values: "b-Values Count",
+                      bValues: "b-Values Count",
+                      num_directions: "Gradient Directions",
+                      numDirections: "Gradient Directions",
+                    };
+                    const displayLabel =
+                      labelMap[metaKey] ||
+                      metaKey
+                        .replace(/([A-Z])/g, " $1")
+                        .replace(/_/g, " ")
+                        .replace(/^./, (str) => str.toUpperCase());
+
+                    return (
+                      <div key={metaKey} className="bg-white p-3 rounded-lg border border-gray-200/70 shadow-xs">
+                        <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
+                          {displayLabel}
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm">
+                          {String(metaVal)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mb-8">
+
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
                 Visible Symptoms
               </h4>

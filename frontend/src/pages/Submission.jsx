@@ -1,11 +1,20 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { createSubmission } from "../services/api";
+import { createSubmission, fetchMetadataSchema } from "../services/api";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES = 8;
-const ACCEPTED_EXTENSIONS = [".dcm", ".dicom", ".nii", ".nii.gz", ".png", ".jpg", ".jpeg"];
+const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg"];
+
+const MODALITY_FIELD_DEFINITIONS = {
+  ASL: [],
+  DSC: [],
+  DCE: [],
+  IVIM: [],
+  MULTI: [],
+  UNKNOWN: [],
+};
 
 const INITIAL_FORM = {
   artifactName: "",
@@ -21,8 +30,9 @@ const INITIAL_FORM = {
   remedies: "",
   references: "",
   submitterNotes: "",
-  permissionConfirmed: false,
-  pseudonymisationConfirmed: false,
+  modalityMetadata: {},
+  permissionConfirmed: true,
+  pseudonymisationConfirmed: true,
 };
 
 const modalityOptions = ["ASL", "DSC", "DCE", "IVIM", "MULTI", "UNKNOWN"];
@@ -70,7 +80,10 @@ const formatFileSize = (bytes) => {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 };
 
-const validateSubmission = (form) => {
+const validateSubmission = (form, dynamicDefs = [], files = []) => {
+  if (!files || files.length === 0) {
+    return "Upload at least one image file.";
+  }
   if (!form.artifactName.trim()) {
     return "Artifact name is required.";
   }
@@ -86,11 +99,17 @@ const validateSubmission = (form) => {
   if (!form.category) {
     return "Select a category.";
   }
+
+  // Modality-specific field validation
+  const modalityDefs = dynamicDefs.length > 0 ? dynamicDefs : (MODALITY_FIELD_DEFINITIONS[form.modality] || []);
+  for (const def of modalityDefs) {
+    if (def.required && !form.modalityMetadata?.[def.key]?.trim()) {
+      return `Please enter ${def.label} for ${form.modality}.`;
+    }
+  }
+
   if (form.description.trim().length < 10) {
     return "Add a description of at least 10 characters.";
-  }
-  if (!form.permissionConfirmed || !form.pseudonymisationConfirmed) {
-    return "Confirm permission and pseudonymisation before submitting.";
   }
   return "";
 };
@@ -110,12 +129,53 @@ function Submission() {
   const [submitAction, setSubmitAction] = useState("publish");
   const [formError, setFormError] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [dynamicSchemas, setDynamicSchemas] = useState(MODALITY_FIELD_DEFINITIONS);
+
+  useEffect(() => {
+    let active = true;
+    fetchMetadataSchema()
+      .then((data) => {
+        if (active && Array.isArray(data) && data.length > 0) {
+          const grouped = { ASL: [], DSC: [], DCE: [], IVIM: [] };
+          data.forEach((item) => {
+            const mod = item.modality;
+            if (!grouped[mod]) grouped[mod] = [];
+            grouped[mod].push({
+              key: item.key,
+              label: item.label,
+              type: item.field_type || "text",
+              unit: item.unit || "",
+              placeholder: item.example ? `e.g., ${item.example}` : `e.g., ${item.label}`,
+              required: !!item.is_required,
+            });
+          });
+          setDynamicSchemas(grouped);
+        }
+      })
+      .catch(() => {
+        // Keep initial fallback
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const updateField = (event) => {
     const { checked, name, type, value } = event.target;
     setForm((current) => ({
       ...current,
       [name]: type === "checkbox" ? checked : value,
+      ...(name === "modality" ? { modalityMetadata: {} } : {}),
+    }));
+  };
+
+  const updateMetadataField = (key, value) => {
+    setForm((current) => ({
+      ...current,
+      modalityMetadata: {
+        ...current.modalityMetadata,
+        [key]: value,
+      },
     }));
   };
 
@@ -215,7 +275,8 @@ function Submission() {
 
     const symptomsForSubmit = normaliseTags([...form.symptoms, tagInput]);
     const payload = { ...form, symptoms: symptomsForSubmit };
-    const validationError = validateSubmission(payload);
+    const activeDefs = dynamicSchemas[form.modality] || [];
+    const validationError = validateSubmission(payload, activeDefs, files);
 
     if (validationError) {
       setFormError(validationError);
@@ -265,7 +326,7 @@ function Submission() {
     return (
       <div id="submit-success" className="py-12 text-center animate-fade-in max-w-4xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <i className="fas fa-check text-3xl text-green-600"></i>
+          <i className="fas fa-check text-3xl text-green-600"></i>
         </div>
         <h3 className="text-2xl font-bold text-gray-900 mb-2">
           {isDraft ? "Draft Saved" : "Submission Received!"}
@@ -290,10 +351,10 @@ function Submission() {
 
   return (
     <div className="animate-fade-in max-w-4xl mx-auto">
-        <div className="text-center mb-10">
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Submit an Artifact</h1>
-            <p className="mt-2 text-gray-500">Publishing as {user?.email || "your AURA account"}.</p>
-        </div>
+      <div className="text-center mb-10">
+        <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Submit an Artifact</h1>
+        <p className="mt-2 text-gray-500">Publishing as {user?.email || "your AURA account"}.</p>
+      </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
         {formError && (
@@ -304,7 +365,7 @@ function Submission() {
 
         <form onSubmit={handleSubmit} className="space-y-8">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images <span className="text-gray-400">(Optional)</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Upload Images <span className="text-red-500">*</span></label>
             <div
               className={`mt-1 flex justify-center px-6 pt-10 pb-12 border-2 border-dashed rounded-xl transition-colors cursor-pointer group ${
                 dragActive ? "border-brand-500 bg-brand-50" : "border-gray-300 hover:bg-gray-50"
@@ -339,10 +400,10 @@ function Submission() {
                   </span>
                   <p className="pl-1">or drag and drop</p>
                 </div>
-                <p className="text-xs text-gray-500">DICOM, NIfTI, PNG, JPG up to 50MB</p>
+                <p className="text-xs text-gray-500">PNG, JPG, JPEG up to 50MB</p>
               </div>
               <input
-                accept={ACCEPTED_EXTENSIONS.join(",")}
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                 className="sr-only"
                 multiple
                 onChange={handleFileInput}
@@ -454,7 +515,7 @@ function Submission() {
                 id="scanner"
                 name="scanner"
                 onChange={updateField}
-                placeholder="e.g., Scanner 1"
+                placeholder="e.g., Siemens Prisma 3T"
                 type="text"
                 value={form.scanner}
               />
@@ -474,6 +535,38 @@ function Submission() {
                 value={form.sequence}
               />
             </div>
+
+            {/* DYNAMIC MODALITY TECHNIQUE METADATA SECTION */}
+            {dynamicSchemas[form.modality] && dynamicSchemas[form.modality].length > 0 && (
+              <div className="sm:col-span-2 rounded-2xl border border-gray-200 bg-gray-50/60 p-5 shadow-sm transition-all animate-fade-in">
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">
+                    Technique Metadata ({form.modality})
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Enter acquisition parameters specific to the {form.modality} modality.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {dynamicSchemas[form.modality].map((field) => (
+                    <div key={field.key}>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1" htmlFor={`meta-${field.key}`}>
+                        {field.label} {field.unit ? <span className="text-gray-400 font-normal">({field.unit})</span> : ""} {field.required && <span className="text-red-500">*</span>}
+                      </label>
+                      <input
+                        className={fieldClass}
+                        id={`meta-${field.key}`}
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={form.modalityMetadata?.[field.key] || ""}
+                        onChange={(e) => updateMetadataField(field.key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700" htmlFor="symptoms">
@@ -566,32 +659,6 @@ function Submission() {
                 value={form.submitterNotes}
               ></textarea>
             </div>
-
-            <div className="sm:col-span-2 space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <label className="flex gap-3 text-sm text-gray-700">
-                <input
-                  checked={form.permissionConfirmed}
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  name="permissionConfirmed"
-                  onChange={updateField}
-                  required
-                  type="checkbox"
-                />
-                <span>I have permission to submit these files for review.</span>
-              </label>
-
-              <label className="flex gap-3 text-sm text-gray-700">
-                <input
-                  checked={form.pseudonymisationConfirmed}
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  name="pseudonymisationConfirmed"
-                  onChange={updateField}
-                  required
-                  type="checkbox"
-                />
-                <span>The uploaded files are pseudonymised.</span>
-              </label>
-            </div>
           </div>
 
           <div className="pt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -613,10 +680,10 @@ function Submission() {
               className="bg-brand-600 hover:bg-brand-700 text-white font-medium py-3 px-6 rounded-xl ml-3 shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting && submitAction === "publish" ? "Publishing..." : "Publish Artifact"} <i className={`fas ${submitting && submitAction === "publish" ? "fa-spinner fa-spin" : "fa-paper-plane"}`}></i>
-                    </button>
-                </div>
-            </form>
-        </div>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

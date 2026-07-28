@@ -91,10 +91,18 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
 
 def _artifact_detail(artifact: Artifact) -> ArtifactDetailRead:
     summary = _artifact_summary(artifact)
+    modality_meta = {}
+    if artifact.remedies:
+        for rem in artifact.remedies:
+            if isinstance(rem, dict) and rem.get("stage") == "modality_metadata":
+                modality_meta = rem.get("data", {})
+                break
     return ArtifactDetailRead(
         **summary.model_dump(),
         remedies=artifact.remedies,
+        modality_metadata=modality_meta,
     )
+
 
 
 @router.get("", response_model=list[ArtifactSummaryRead])

@@ -63,3 +63,5 @@ class ArtifactSummaryRead(BaseModel):
 
 class ArtifactDetailRead(ArtifactSummaryRead):
     remedies: list[dict[str, Any]] = Field(default_factory=list)
+    modality_metadata: dict[str, Any] = Field(default_factory=dict)
+

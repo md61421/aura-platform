@@ -2,6 +2,7 @@ from app.db.models.artifact import Artifact
 from app.db.models.comment import Comment
 from app.db.models.file import ImageFile
 from app.db.models.image import Image, ImageArtifact
+from app.db.models.modality_schema import ModalityMetadataField
 from app.db.models.qc import QCResult
 from app.db.models.review import ReviewAction
 from app.db.models.submission import Submission
@@ -16,6 +17,7 @@ __all__ = [
     "Image",
     "ImageArtifact",
     "ImageFile",
+    "ModalityMetadataField",
     "QCResult",
     "ReviewAction",
     "Submission",

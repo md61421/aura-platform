@@ -551,6 +551,7 @@ def create_submission(
     remedies: Annotated[str | None, Form()] = None,
     references: Annotated[str | None, Form()] = None,
     submitter_notes: Annotated[str | None, Form()] = None,
+    modality_metadata: Annotated[str | None, Form()] = None,
     save_as_draft: Annotated[bool, Form()] = False,
     db: Session = Depends(get_db_session),
 ):
@@ -583,6 +584,15 @@ def create_submission(
         if symptom_name.casefold() != category_name.casefold()
     ]
     remedy_payload = _remedies_from_text(remedies)
+    parsed_meta = {}
+    if modality_metadata:
+        try:
+            raw_parsed = json.loads(modality_metadata)
+            if isinstance(raw_parsed, dict) and raw_parsed:
+                parsed_meta = raw_parsed
+                remedy_payload.append({"stage": "modality_metadata", "data": parsed_meta})
+        except Exception:
+            pass
     reference_lines = _parse_lines(references)
     publish_immediately = not save_as_draft
 
@@ -627,6 +637,7 @@ def create_submission(
         sequence=_clean_text(sequence),
         protocol=_clean_text(protocol),
         field_strength=_clean_text(field_strength),
+        modality_metadata=parsed_meta if parsed_meta else None,
         visibility_status=(
             ImageVisibilityStatus.APPROVED_PUBLIC
             if publish_immediately

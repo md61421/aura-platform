@@ -22,7 +22,7 @@ const Navbar = () => {
   const navLinks = [
     { name: "Browse", path: "/" },
     { name: "Submit Artifact", path: submitPath, activePath: "/submit" },
-    ...(canReview ? [{ name: "Review", path: "/admin", badge: true }] : []),
+    ...(canReview ? [{ name: "Admin Panel", path: "/admin", badge: true }] : []),
     ...(isAuthenticated
       ? [
           { name: "My Submissions", path: "/profile" },

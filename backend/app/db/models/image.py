@@ -2,7 +2,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Index, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_class import Base
@@ -48,6 +48,7 @@ class Image(TimestampMixin, Base):
     sequence: Mapped[str | None] = mapped_column(String(120), nullable=True)
     protocol: Mapped[str | None] = mapped_column(String(255), nullable=True)
     field_strength: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    modality_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     visibility_status: Mapped[ImageVisibilityStatus] = mapped_column(
         Enum(
             ImageVisibilityStatus,
