@@ -66,9 +66,9 @@ def make_artifact_with_submission():
     )
     artifact = Artifact(
         id=uuid4(),
-        title="Community artifact",
+        title="Contributor artifact",
         default_modality=Modality.ASL,
-        status=ArtifactStatus.COMMUNITY_PUBLISHED,
+        status=ArtifactStatus.CONTRIBUTOR_PUBLISHED,
     )
     artifact.image_links = [
         ImageArtifact(

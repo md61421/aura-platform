@@ -1,5 +1,5 @@
 from app.schemas.artifact import ArtifactCreate, ArtifactRead
-from app.schemas.comment import CommentCreate, CommentRead, CommunityCommentCreate
+from app.schemas.comment import CommentCreate, CommentRead, ContributorCommentCreate
 from app.schemas.image import ImageArtifactCreate, ImageArtifactRead, ImageCreate, ImageFileCreate, ImageFileRead, ImageRead
 from app.schemas.qc import QCResultCreate, QCResultRead
 from app.schemas.review import (
@@ -18,7 +18,7 @@ from app.schemas.submission import (
 )
 from app.schemas.tag import ArtifactTagCreate, ArtifactTagRead, TagCreate, TagRead
 from app.schemas.user import UserCreate, UserRead
-from app.schemas.vote import CommunityVoteCreate, VoteCreate, VoteRead
+from app.schemas.vote import ContributorVoteCreate, VoteCreate, VoteRead
 
 __all__ = [
     "ArtifactCreate",
@@ -28,8 +28,8 @@ __all__ = [
     "ArtifactTagRead",
     "CommentCreate",
     "CommentRead",
-    "CommunityCommentCreate",
-    "CommunityVoteCreate",
+    "ContributorCommentCreate",
+    "ContributorVoteCreate",
     "ImageArtifactCreate",
     "ImageArtifactRead",
     "ImageCreate",

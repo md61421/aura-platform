@@ -41,7 +41,7 @@ const ARTIFACT_STATUS_META = {
     className: "bg-slate-100 text-slate-700 ring-slate-200",
     label: "Archived",
   },
-  community_published: {
+  contributor_published: {
     className: "bg-blue-50 text-blue-700 ring-blue-200",
     label: "Live",
   },
@@ -63,9 +63,9 @@ const ARTIFACT_STATUS_META = {
   },
 };
 
-const publicArtifactStatuses = new Set(["community_published", "osipi_verified", "approved"]);
-const editableArtifactStatuses = new Set(["approved", "community_published", "draft", "flagged", "osipi_verified"]);
-const removableArtifactStatuses = new Set(["approved", "community_published", "flagged", "osipi_verified"]);
+const publicArtifactStatuses = new Set(["contributor_published", "osipi_verified", "approved"]);
+const editableArtifactStatuses = new Set(["approved", "contributor_published", "draft", "flagged", "osipi_verified"]);
+const removableArtifactStatuses = new Set(["approved", "contributor_published", "flagged", "osipi_verified"]);
 const republishableArtifactStatuses = new Set(["archived", "rejected"]);
 const modalityOptions = ["ASL", "DSC", "DCE", "IVIM", "MULTI", "UNKNOWN"];
 const fieldClass =
@@ -239,7 +239,7 @@ const Profile = () => {
   const stats = useMemo(() => {
     const total = submissions.length;
     const live = submissions.filter((submission) =>
-      ["approved", "community_published"].includes(submission.artifact?.status)
+      ["approved", "contributor_published"].includes(submission.artifact?.status)
     ).length;
     const verified = submissions.filter(
       (submission) => submission.artifact?.status === "osipi_verified"
@@ -569,7 +569,7 @@ const Profile = () => {
               <div>
                 <h3 className="text-xl font-extrabold text-gray-900">Edit artifact</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  Changes update the live community listing.
+                  Changes update the live contributor listing.
                 </p>
               </div>
               <button

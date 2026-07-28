@@ -72,7 +72,7 @@ const ArtifactCard = ({ artifact }) => {
                         </span>
                     ) : (
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-medium tracking-wide uppercase bg-slate-800/85 text-slate-200 border border-slate-600 backdrop-blur-sm flex items-center gap-1 shadow-sm">
-                            <i className="fas fa-users text-[10px]"></i> Community
+                            <i className="fas fa-users text-[10px]"></i> Contributor
                         </span>
                     )}
                 </div>

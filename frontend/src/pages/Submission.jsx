@@ -334,7 +334,7 @@ function Submission() {
         <p className="text-gray-500 max-w-sm mx-auto mb-8">
           {isDraft
             ? "Your artifact draft is saved and visible in My Submissions."
-            : "Your artifact is published to the community and linked to your account."}
+            : "Your artifact is published to contributors and linked to your account."}
         </p>
         <p className="text-xs text-gray-400 max-w-sm mx-auto mb-8">Receipt ID: {receipt.id}</p>
         <div className="flex flex-col sm:flex-row justify-center gap-3">

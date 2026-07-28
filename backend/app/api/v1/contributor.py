@@ -10,8 +10,8 @@ from app.core.exceptions import not_found_exception
 from app.core.workflow import PUBLIC_ARTIFACT_STATUSES
 from app.db.models import Artifact, Comment, Image, ImageArtifact, User, Vote
 from app.db.models.enums import CommentStatus, ImageVisibilityStatus, VoteType
-from app.schemas.comment import CommentRead, CommunityCommentCreate
-from app.schemas.vote import CommunityVoteCreate, VoteRead
+from app.schemas.comment import CommentRead, ContributorCommentCreate
+from app.schemas.vote import ContributorVoteCreate, VoteRead
 
 router = APIRouter()
 
@@ -49,7 +49,7 @@ def _display_name(user: User) -> str | None:
 )
 def vote_on_image(
     image_id: UUID,
-    payload: CommunityVoteCreate,
+    payload: ContributorVoteCreate,
     current_user: Annotated[User, Depends(require_contributor)],
     db: Session = Depends(get_db_session),
 ) -> Vote:
@@ -84,7 +84,7 @@ def vote_on_image(
 )
 def comment_on_image(
     image_id: UUID,
-    payload: CommunityCommentCreate,
+    payload: ContributorCommentCreate,
     current_user: Annotated[User, Depends(require_contributor)],
     db: Session = Depends(get_db_session),
 ) -> Comment:

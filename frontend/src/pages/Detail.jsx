@@ -323,14 +323,14 @@ function Detail() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-900">
-                    Community Validation
+                    Contributor Validation
                   </h4>
                   <p className="text-xs text-gray-500">
                     {isVerified
                       ? "Verified consensus"
                       : isFlagged
                         ? "Needs reviewer attention"
-                        : "Open for community review"}
+                        : "Open for contributor review"}
                   </p>
                 </div>
                 <div className="rounded-lg bg-white px-3 py-2 text-right shadow-sm ring-1 ring-gray-100">

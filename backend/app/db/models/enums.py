@@ -20,7 +20,7 @@ class Modality(str, Enum):
 
 class ArtifactStatus(str, Enum):
     DRAFT = "draft"
-    COMMUNITY_PUBLISHED = "community_published"
+    CONTRIBUTOR_PUBLISHED = "contributor_published"
     OSIPI_VERIFIED = "osipi_verified"
     FLAGGED = "flagged"
     REJECTED = "rejected"

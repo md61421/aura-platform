@@ -39,9 +39,9 @@ const ACTION_COPY = {
 };
 
 const STATUS_COPY = {
-  community_published: {
+  contributor_published: {
     className: "bg-blue-50 text-blue-700 ring-blue-200",
-    label: "Community Published",
+    label: "Contributor Published",
   },
   osipi_verified: {
     className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
@@ -191,7 +191,7 @@ const Admin = () => {
   // Compute Platform Metrics
   const metrics = useMemo(() => {
     const total = artifacts.length;
-    const pending = artifacts.filter((a) => a.backendStatus === "community_published").length;
+    const pending = artifacts.filter((a) => a.backendStatus === "contributor_published").length;
     const verified = artifacts.filter((a) => a.backendStatus === "osipi_verified" || a.backendStatus === "approved").length;
     const flagged = artifacts.filter((a) => a.backendStatus === "flagged").length;
     return { total, pending, verified, flagged };
@@ -201,7 +201,7 @@ const Admin = () => {
   const filteredArtifacts = useMemo(() => {
     return artifacts.filter((artifact) => {
       // Sub-tab status filter
-      if (modSubTab === "queue" && artifact.backendStatus !== "community_published") {
+      if (modSubTab === "queue" && artifact.backendStatus !== "contributor_published") {
         return false;
       }
       if (
@@ -406,7 +406,7 @@ const Admin = () => {
               Admin Panel
             </h1>
             <p className="mt-1 text-slate-300 text-sm sm:text-base max-w-2xl">
-              Central administrative dashboard to review community submissions, configure modality metadata schemas, and manage platform governance.
+              Central administrative dashboard to review contributor submissions, configure modality metadata schemas, and manage platform governance.
             </p>
           </div>
 

@@ -511,7 +511,7 @@ def republish_my_submission(
         raise bad_request_exception("Only draft or removed artifacts can be published")
 
     submission.status = SubmissionStatus.APPROVED
-    artifact.status = ArtifactStatus.COMMUNITY_PUBLISHED
+    artifact.status = ArtifactStatus.CONTRIBUTOR_PUBLISHED
     image.visibility_status = ImageVisibilityStatus.APPROVED_PUBLIC
 
     for image_file in image.files:
@@ -623,7 +623,7 @@ def create_submission(
         remedies=remedy_payload,
         default_modality=modality,
         status=(
-            ArtifactStatus.COMMUNITY_PUBLISHED
+            ArtifactStatus.CONTRIBUTOR_PUBLISHED
             if publish_immediately
             else ArtifactStatus.DRAFT
         ),
