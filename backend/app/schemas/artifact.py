@@ -15,7 +15,7 @@ class ArtifactCreate(BaseModel):
     visual_description: str | None = None
     remedies: list[dict[str, Any]] = Field(default_factory=list)
     default_modality: Modality = Modality.UNKNOWN
-    status: ArtifactStatus = ArtifactStatus.COMMUNITY_PUBLISHED
+    status: ArtifactStatus = ArtifactStatus.CONTRIBUTOR_PUBLISHED
 
 
 class ArtifactRead(ArtifactCreate):

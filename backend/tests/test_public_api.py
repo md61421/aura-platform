@@ -157,7 +157,7 @@ def make_user(role=UserRole.CONTRIBUTOR):
 def valid_submission_kwargs(**overrides):
     values = {
         "request": FakeRequest(),
-        "artifact_name": "Community artifact",
+        "artifact_name": "Contributor artifact",
         "contact_email": "researcher@example.org",
         "modality": Modality.ASL,
         "category": "Motion",
@@ -353,8 +353,8 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
     assert payload["contact_email"] == "researcher@example.org"
     assert payload["submitted_by_id"] is not None
     assert payload["status"].value == "approved"
-    assert payload["artifact"]["title"] == "Community artifact"
-    assert payload["artifact"]["status"].value == "community_published"
+    assert payload["artifact"]["title"] == "Contributor artifact"
+    assert payload["artifact"]["status"].value == "contributor_published"
     assert payload["artifact"]["tags"] == ["Motion", "ghosting"]
     assert payload["image"]["visibility_status"].value == "approved_public"
     assert payload["files"][0]["file_type"].value == "png"
@@ -464,7 +464,7 @@ def test_list_my_submissions_returns_current_user_items():
     )
     artifact = make_artifact(
         title="Submitted artifact",
-        status=ArtifactStatus.COMMUNITY_PUBLISHED,
+        status=ArtifactStatus.CONTRIBUTOR_PUBLISHED,
         created_at=now,
         updated_at=now,
     )
@@ -502,7 +502,7 @@ def test_list_my_submissions_returns_current_user_items():
     assert len(response) == 1
     assert response[0].id == submission.id
     assert response[0].artifact.title == "Submitted artifact"
-    assert response[0].artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert response[0].artifact.status == ArtifactStatus.CONTRIBUTOR_PUBLISHED
     assert response[0].image.vendor == "Siemens"
     assert response[0].file_count == 1
 
@@ -522,7 +522,7 @@ def make_manageable_submission(user):
     )
     artifact = make_artifact(
         title="Submitted artifact",
-        status=ArtifactStatus.COMMUNITY_PUBLISHED,
+        status=ArtifactStatus.CONTRIBUTOR_PUBLISHED,
         created_at=now,
         updated_at=now,
     )
@@ -697,14 +697,14 @@ def test_republish_my_submission_restores_public_image_files_only():
     )
 
     assert submission.status == SubmissionStatus.APPROVED
-    assert artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert artifact.status == ArtifactStatus.CONTRIBUTOR_PUBLISHED
     assert image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
     assert image.files[0].is_public is True
     assert image.files[0].public_url == "http://testserver/uploads/submissions/example.png"
     assert image.files[1].is_public is False
     assert image.files[1].public_url is None
     assert response.status == SubmissionStatus.APPROVED
-    assert response.artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert response.artifact.status == ArtifactStatus.CONTRIBUTOR_PUBLISHED
     assert db.committed is True
 
 
@@ -726,10 +726,10 @@ def test_republish_my_submission_publishes_draft():
     )
 
     assert submission.status == SubmissionStatus.APPROVED
-    assert artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert artifact.status == ArtifactStatus.CONTRIBUTOR_PUBLISHED
     assert image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
     assert image.files[0].is_public is True
-    assert response.artifact.status == ArtifactStatus.COMMUNITY_PUBLISHED
+    assert response.artifact.status == ArtifactStatus.CONTRIBUTOR_PUBLISHED
 
 
 @pytest.mark.parametrize(

@@ -13,7 +13,7 @@ class VoteCreate(BaseModel):
     vote_type: VoteType
 
 
-class CommunityVoteCreate(BaseModel):
+class ContributorVoteCreate(BaseModel):
     vote_type: VoteType
 
 

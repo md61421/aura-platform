@@ -133,8 +133,8 @@ const statusLabel = (status) => {
     if (status === "osipi_verified" || status === "approved") {
         return "OSIPI Verified";
     }
-    if (status === "community_published") {
-        return "Community Published";
+    if (status === "contributor_published") {
+        return "Contributor Published";
     }
     if (status === "flagged") {
         return "Flagged";
@@ -145,7 +145,7 @@ const statusLabel = (status) => {
     if (status === "archived") {
         return "Archived";
     }
-    return "Community Submitted";
+    return "Contributor Submitted";
 };
 
 const reliabilityVotesFromScore = (score = 0) => ({

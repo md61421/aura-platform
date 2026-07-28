@@ -15,7 +15,7 @@ class CommentCreate(BaseModel):
     status: CommentStatus = CommentStatus.VISIBLE
 
 
-class CommunityCommentCreate(BaseModel):
+class ContributorCommentCreate(BaseModel):
     body: str = Field(min_length=2, max_length=4000)
 
 
