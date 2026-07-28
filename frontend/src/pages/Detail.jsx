@@ -209,9 +209,12 @@ function Detail() {
               {artifact.explanation && (
                 <p className="mb-4">{artifact.explanation}</p>
               )}
-              <p>
-                {artifact.description || "No visual description available yet."}
-              </p>
+              {artifact.description && artifact.description !== artifact.explanation && (
+                <p>{artifact.description}</p>
+              )}
+              {!artifact.explanation && !artifact.description && (
+                <p>No description available yet.</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-8">
