@@ -36,7 +36,7 @@ from app.schemas.submission import (
 router = APIRouter()
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_FILES_PER_SUBMISSION = 8
+MAX_FILES_PER_SUBMISSION = 500
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
@@ -143,15 +143,7 @@ def _storage_root() -> Path:
     root = Path(settings.LOCAL_STORAGE_ROOT)
     if not root.is_absolute():
         root = Path.cwd() / root
-    try:
-        root.mkdir(parents=True, exist_ok=True)
-        return root
-    except (OSError, PermissionError):
-        import tempfile
-
-        temp_root = Path(tempfile.gettempdir()) / "aura_uploads"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        return temp_root
+    return root
 
 
 def _storage_provider() -> StorageProvider:
@@ -164,11 +156,7 @@ def _storage_provider() -> StorageProvider:
 def _public_url_for_upload(request: Request, storage_key: str, file_type: FileType) -> str | None:
     if file_type not in {FileType.JPG, FileType.PNG}:
         return None
-    try:
-        return str(request.url_for("local_upload", path=storage_key))
-    except Exception:
-        base_url = str(request.base_url).rstrip("/")
-        return f"{base_url}/uploads/{storage_key}"
+    return str(request.url_for("local_upload", path=storage_key))
 
 
 def _store_upload(upload: UploadFile, submission_id: UUID) -> tuple[str, int, str, Path]:
@@ -551,10 +539,14 @@ def create_submission(
     modality: Annotated[Modality, Form()],
     category: Annotated[str, Form(min_length=2, max_length=120)],
     description: Annotated[str, Form(min_length=10)],
-    permission_confirmed: Annotated[bool, Form()],
-    pseudonymisation_confirmed: Annotated[bool, Form()],
     current_user: Annotated[User, Depends(require_contributor)],
+    permission_confirmed: Annotated[bool, Form()] = True,
+    pseudonymisation_confirmed: Annotated[bool, Form()] = True,
     files: Annotated[list[UploadFile] | None, File()] = None,
+    axial_montage: Annotated[UploadFile | None, File()] = None,
+    coronal_montage: Annotated[UploadFile | None, File()] = None,
+    sagittal_montage: Annotated[UploadFile | None, File()] = None,
+    primary_index: Annotated[int, Form()] = 0,
     scanner: Annotated[str | None, Form(max_length=120)] = None,
     sequence: Annotated[str | None, Form(max_length=120)] = None,
     protocol: Annotated[str | None, Form(max_length=255)] = None,
@@ -563,7 +555,7 @@ def create_submission(
     remedies: Annotated[str | None, Form()] = None,
     references: Annotated[str | None, Form()] = None,
     submitter_notes: Annotated[str | None, Form()] = None,
-    modality_metadata: Annotated[str | None, Form()] = None,
+    slice_metadata: Annotated[str | None, Form()] = None,
     save_as_draft: Annotated[bool, Form()] = False,
     db: Session = Depends(get_db_session),
 ):
@@ -574,11 +566,6 @@ def create_submission(
             detail="Enter a valid contact email address.",
         )
 
-    if not permission_confirmed or not pseudonymisation_confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Confirm permission and pseudonymisation before submitting.",
-        )
 
     upload_files = files or []
     if len(upload_files) > MAX_FILES_PER_SUBMISSION:
@@ -596,17 +583,15 @@ def create_submission(
         if symptom_name.casefold() != category_name.casefold()
     ]
     remedy_payload = _remedies_from_text(remedies)
-    parsed_meta = {}
-    if modality_metadata:
-        try:
-            raw_parsed = json.loads(modality_metadata)
-            if isinstance(raw_parsed, dict) and raw_parsed:
-                parsed_meta = raw_parsed
-                remedy_payload.append({"stage": "modality_metadata", "data": parsed_meta})
-        except Exception:
-            pass
     reference_lines = _parse_lines(references)
     publish_immediately = not save_as_draft
+
+    parsed_slice_metadata = []
+    if slice_metadata:
+        try:
+            parsed_slice_metadata = json.loads(slice_metadata) if isinstance(slice_metadata, str) else slice_metadata
+        except Exception:
+            parsed_slice_metadata = []
 
     saved_paths: list[Path] = []
     stored_file_rows: list[tuple[ImageFile, str]] = []
@@ -623,6 +608,7 @@ def create_submission(
                 "symptoms": symptom_names,
                 "references": reference_lines,
                 "submitter_notes": _clean_text(submitter_notes),
+                "slice_metadata": parsed_slice_metadata,
             },
             indent=2,
         ),
@@ -649,7 +635,6 @@ def create_submission(
         sequence=_clean_text(sequence),
         protocol=_clean_text(protocol),
         field_strength=_clean_text(field_strength),
-        modality_metadata=parsed_meta if parsed_meta else None,
         visibility_status=(
             ImageVisibilityStatus.APPROVED_PUBLIC
             if publish_immediately
@@ -685,7 +670,7 @@ def create_submission(
         db.add_all([submission, artifact, image])
         db.flush()
 
-        for upload, file_type in zip(upload_files, file_types, strict=True):
+        for idx, (upload, file_type) in enumerate(zip(upload_files, file_types, strict=True)):
             storage_key, total_bytes, checksum, saved_path = _store_upload(upload, submission.id)
             saved_paths.append(saved_path)
             public_url = (
@@ -694,9 +679,15 @@ def create_submission(
                 else None
             )
 
+            role = (
+                FileRole.PRIMARY_REPRESENTATIVE
+                if idx == primary_index
+                else FileRole.REPRESENTATIVE
+            )
+
             image_file = ImageFile(
                 image=image,
-                file_role=FileRole.OTHER,
+                file_role=role,
                 file_type=file_type,
                 storage_provider=_storage_provider(),
                 storage_bucket=settings.PRIVATE_STORAGE_BUCKET,
@@ -709,6 +700,38 @@ def create_submission(
             db.add(image_file)
             db.flush()
             stored_file_rows.append((image_file, upload.filename or "upload"))
+
+        montage_uploads = [
+            (axial_montage, FileRole.AXIAL_MONTAGE),
+            (coronal_montage, FileRole.CORONAL_MONTAGE),
+            (sagittal_montage, FileRole.SAGITTAL_MONTAGE),
+        ]
+        for m_upload, m_role in montage_uploads:
+            if m_upload and m_upload.filename:
+                m_type = _file_type_for_filename(m_upload.filename)
+                storage_key, total_bytes, checksum, saved_path = _store_upload(m_upload, submission.id)
+                saved_paths.append(saved_path)
+                public_url = (
+                    _public_url_for_upload(request, storage_key, m_type)
+                    if publish_immediately
+                    else None
+                )
+
+                m_file = ImageFile(
+                    image=image,
+                    file_role=m_role,
+                    file_type=m_type,
+                    storage_provider=_storage_provider(),
+                    storage_bucket=settings.PRIVATE_STORAGE_BUCKET,
+                    storage_key=storage_key,
+                    public_url=public_url,
+                    is_public=public_url is not None,
+                    file_size_mb=round(total_bytes / (1024 * 1024), 3),
+                    checksum=checksum,
+                )
+                db.add(m_file)
+                db.flush()
+                stored_file_rows.append((m_file, m_upload.filename))
 
         db.commit()
         db.refresh(submission)

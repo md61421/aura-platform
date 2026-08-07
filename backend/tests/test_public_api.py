@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import json
 from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
@@ -360,6 +361,32 @@ def test_create_submission_stores_file_and_returns_receipt(monkeypatch, tmp_path
     assert payload["files"][0]["file_type"].value == "png"
     assert db.committed is True
     assert list(Path(tmp_path).glob("submissions/*/*-example.png"))
+
+
+def test_create_submission_with_slice_metadata(monkeypatch, tmp_path):
+    db = FakeWriteSession()
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
+    monkeypatch.setattr(settings, "DEV_AUTO_APPROVE_SUBMISSIONS", True)
+
+    slice_info = [
+        {"filename": "ax_001.png", "view": "axial", "slice_order": 1, "is_priority": True},
+        {"filename": "ax_002.png", "view": "axial", "slice_order": 2, "is_priority": False},
+        {"filename": "cor_001.png", "view": "coronal", "slice_order": 1, "is_priority": True},
+    ]
+
+    response = submissions.create_submission(
+        **valid_submission_kwargs(
+            db=db,
+            files=[make_upload("ax_001.png"), make_upload("ax_002.png"), make_upload("cor_001.png")],
+            slice_metadata=json.dumps(slice_info),
+        )
+    )
+
+    assert response["status"].value == "approved"
+    assert len(response["files"]) == 3
+    submission = next(obj for obj in db.objects if isinstance(obj, Submission))
+    parsed_notes = json.loads(submission.submitter_notes)
+    assert parsed_notes["slice_metadata"] == slice_info
 
 
 def test_create_submission_attaches_logged_in_user(monkeypatch):
@@ -736,7 +763,6 @@ def test_republish_my_submission_publishes_draft():
     ("form_updates", "expected_detail"),
     [
         ({"contact_email": "bad-email"}, "Enter a valid contact email address."),
-        ({"permission_confirmed": False}, "Confirm permission and pseudonymisation"),
     ],
 )
 def test_create_submission_validation_errors(form_updates, expected_detail):

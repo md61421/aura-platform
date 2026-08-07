@@ -24,6 +24,9 @@ def _artifact_options():
         selectinload(Artifact.tag_links).selectinload(ArtifactTag.tag),
         selectinload(Artifact.image_links)
         .selectinload(ImageArtifact.image)
+        .selectinload(Image.submission),
+        selectinload(Artifact.image_links)
+        .selectinload(ImageArtifact.image)
         .selectinload(Image.files),
     )
 
@@ -37,6 +40,12 @@ def _tag_names(artifact: Artifact) -> list[str]:
 
 
 def _artifact_summary(artifact: Artifact) -> ArtifactSummaryRead:
+    submitter_notes = None
+    for image_link in artifact.image_links:
+        if image_link.image and image_link.image.submission and image_link.image.submission.submitter_notes:
+            submitter_notes = image_link.image.submission.submitter_notes
+            break
+
     return ArtifactSummaryRead(
         id=artifact.id,
         title=artifact.title,
@@ -47,6 +56,7 @@ def _artifact_summary(artifact: Artifact) -> ArtifactSummaryRead:
         status=artifact.status,
         tags=_tag_names(artifact),
         images=_public_image_summaries(artifact),
+        submitter_notes=submitter_notes,
         created_at=artifact.created_at,
         updated_at=artifact.updated_at,
     )
@@ -59,16 +69,29 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
         if not image or image.visibility_status != ImageVisibilityStatus.APPROVED_PUBLIC:
             continue
 
-        public_files = [
-            PublicImageFileRead(
-                id=image_file.id,
-                file_role=image_file.file_role.value,
-                file_type=image_file.file_type.value,
-                public_url=image_file.public_url,
-            )
-            for image_file in image.files
-            if image_file.is_public and image_file.public_url
-        ]
+        role_priority = {
+            "primary_representative": 0,
+            "representative": 1,
+            "thumbnail": 2,
+            "other": 3,
+            "axial_montage": 4,
+            "coronal_montage": 5,
+            "sagittal_montage": 6,
+        }
+
+        public_files = sorted(
+            [
+                PublicImageFileRead(
+                    id=image_file.id,
+                    file_role=image_file.file_role.value,
+                    file_type=image_file.file_type.value,
+                    public_url=image_file.public_url,
+                )
+                for image_file in image.files
+                if image_file.is_public and image_file.public_url
+            ],
+            key=lambda f: role_priority.get(f.file_role, 99),
+        )
 
         summaries.append(
             PublicImageSummaryRead(
@@ -91,18 +114,10 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
 
 def _artifact_detail(artifact: Artifact) -> ArtifactDetailRead:
     summary = _artifact_summary(artifact)
-    modality_meta = {}
-    if artifact.remedies:
-        for rem in artifact.remedies:
-            if isinstance(rem, dict) and rem.get("stage") == "modality_metadata":
-                modality_meta = rem.get("data", {})
-                break
     return ArtifactDetailRead(
         **summary.model_dump(),
         remedies=artifact.remedies,
-        modality_metadata=modality_meta,
     )
-
 
 
 @router.get("", response_model=list[ArtifactSummaryRead])

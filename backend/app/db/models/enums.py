@@ -51,6 +51,11 @@ class ImageArtifactRelationshipType(str, Enum):
 
 
 class FileRole(str, Enum):
+    PRIMARY_REPRESENTATIVE = "primary_representative"
+    REPRESENTATIVE = "representative"
+    AXIAL_MONTAGE = "axial_montage"
+    CORONAL_MONTAGE = "coronal_montage"
+    SAGITTAL_MONTAGE = "sagittal_montage"
     PERFUSION = "perfusion"
     STRUCTURAL = "structural"
     M0 = "m0"
