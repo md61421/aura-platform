@@ -210,14 +210,17 @@ function Detail() {
                 <p className="mb-4">{artifact.explanation}</p>
               )}
               {artifact.description && artifact.description !== artifact.explanation && (
-                <p>{artifact.description}</p>
-              )}
-              {!artifact.explanation && !artifact.description && (
-                <p>No description available yet.</p>
+                <p>
+                  {artifact.description}
+                </p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-8">
+
+
+
+
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
                   Modality
@@ -252,61 +255,7 @@ function Detail() {
               </div>
             </div>
 
-            {artifact.modality_metadata && Object.keys(artifact.modality_metadata).length > 0 && (
-              <div className="mb-8">
-                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
-                  Technique Metadata ({artifact.modality})
-                </h4>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-slate-50 p-4 rounded-xl border border-gray-100">
-                  {Object.entries(artifact.modality_metadata).map(([metaKey, metaVal]) => {
-                    const labelMap = {
-                      labeling_time: "Labeling Time",
-                      labelingTime: "Labeling Time",
-                      pld: "PLD (Post-Labeling Delay)",
-                      readout: "Readout Sequence",
-                      labeling_strategy: "Labeling Strategy",
-                      labelingStrategy: "Labeling Strategy",
-                      te: "Echo Time (TE)",
-                      tr: "Repetition Time (TR)",
-                      flip_angle: "Flip Angle",
-                      flipAngle: "Flip Angle",
-                      contrast_agent: "Contrast Agent",
-                      contrastAgent: "Contrast Agent",
-                      temporal_res: "Temporal Resolution",
-                      temporalRes: "Temporal Resolution",
-                      injection_rate: "Injection Rate",
-                      injectionRate: "Injection Rate",
-                      contrast_volume: "Contrast Volume",
-                      contrastVolume: "Contrast Volume",
-                      b_values: "b-Values Count",
-                      bValues: "b-Values Count",
-                      num_directions: "Gradient Directions",
-                      numDirections: "Gradient Directions",
-                    };
-                    const displayLabel =
-                      labelMap[metaKey] ||
-                      metaKey
-                        .replace(/([A-Z])/g, " $1")
-                        .replace(/_/g, " ")
-                        .replace(/^./, (str) => str.toUpperCase());
-
-                    return (
-                      <div key={metaKey} className="bg-white p-3 rounded-lg border border-gray-200/70 shadow-xs">
-                        <span className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
-                          {displayLabel}
-                        </span>
-                        <span className="font-bold text-gray-900 text-sm">
-                          {String(metaVal)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             <div className="mb-8">
-
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
                 Visible Symptoms
               </h4>
@@ -326,14 +275,14 @@ function Detail() {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-900">
-                    Contributor Validation
+                    Community Validation
                   </h4>
                   <p className="text-xs text-gray-500">
                     {isVerified
                       ? "Verified consensus"
                       : isFlagged
                         ? "Needs reviewer attention"
-                        : "Open for contributor review"}
+                        : "Open for community review"}
                   </p>
                 </div>
                 <div className="rounded-lg bg-white px-3 py-2 text-right shadow-sm ring-1 ring-gray-100">

@@ -1,18 +1,7 @@
 import { supabase } from "../lib/supabase";
 
-const getFallbackApiBaseUrl = () => {
-    if (typeof window !== "undefined" && window.location.hostname.endsWith("vercel.app")) {
-        return "https://aura-platform-chi.vercel.app/api/v1";
-    }
-    const defaultHost =
-        typeof window !== "undefined" && window.location.hostname === "localhost"
-            ? "localhost"
-            : "127.0.0.1";
-    return `http://${defaultHost}:8000/api/v1`;
-};
-
 const API_BASE_URL = (
-    import.meta.env.VITE_API_BASE_URL || getFallbackApiBaseUrl()
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1"
 ).replace(/\/$/, "");
 
 const UNKNOWN = "Unknown";
@@ -144,7 +133,7 @@ const statusLabel = (status) => {
     if (status === "osipi_verified" || status === "approved") {
         return "OSIPI Verified";
     }
-    if (status === "contributor_published") {
+    if (status === "contributor_published" || status === "community_published") {
         return "Contributor Published";
     }
     if (status === "flagged") {
@@ -217,10 +206,29 @@ const mapArtifact = (artifact) => {
     const visualDescription = firstText(artifact.visual_description);
     const explanation = firstText(artifact.explanation);
     const defaultModality = firstText(artifact.default_modality, image?.modality, UNKNOWN);
-    const examples = publicFiles
-        .filter(isDisplayImageFile)
+
+    const isMontageRole = (role) => ["axial_montage", "coronal_montage", "sagittal_montage"].includes(role);
+
+    const axialMontageFile = publicFiles.find((f) => f.file_role === "axial_montage");
+    const coronalMontageFile = publicFiles.find((f) => f.file_role === "coronal_montage");
+    const sagittalMontageFile = publicFiles.find((f) => f.file_role === "sagittal_montage");
+
+    const montages = {
+        axial: axialMontageFile?.public_url || null,
+        coronal: coronalMontageFile?.public_url || null,
+        sagittal: sagittalMontageFile?.public_url || null,
+    };
+
+    const representativeFiles = publicFiles.filter(
+        (f) => isDisplayImageFile(f) && !isMontageRole(f.file_role)
+    );
+
+    const primaryRepFile = representativeFiles.find((f) => f.file_role === "primary_representative") || representativeFiles[0];
+
+    const examples = representativeFiles
         .map((file) => file.public_url)
         .filter(Boolean);
+
     const niftiVolumes = publicFiles
         .filter(isNiftiFile)
         .filter((file) => file.public_url)
@@ -236,6 +244,40 @@ const mapArtifact = (artifact) => {
     const votes = reliabilityVotesFromScore(reliabilityScore);
     const dateAddedRaw = artifact.created_at || artifact.updated_at || null;
 
+    let sliceMetadata = [];
+    try {
+        const rawNotes = artifact.submission?.submitter_notes || artifact.submitter_notes || artifact.raw?.submitter_notes;
+        if (typeof rawNotes === "string") {
+            sliceMetadata = JSON.parse(rawNotes).slice_metadata || [];
+        } else if (typeof rawNotes === "object" && rawNotes !== null) {
+            sliceMetadata = rawNotes.slice_metadata || [];
+        }
+    } catch {
+        sliceMetadata = [];
+    }
+
+    const exampleSlices = representativeFiles.map((file, index) => {
+        const url = file.public_url;
+        const urlFilename = String(url.split("/").pop() || "").split("?")[0].toLowerCase();
+
+        const meta = sliceMetadata.find((s) => {
+            if (!s || !s.filename) return false;
+            const metaName = String(s.filename).toLowerCase();
+            return urlFilename.endsWith(metaName) || metaName.endsWith(urlFilename) || urlFilename.includes(metaName);
+        }) || sliceMetadata[index];
+
+        const isKeySlice = file.file_role === "primary_representative" || Boolean(meta?.is_priority || meta?.is_key_slice);
+
+        return {
+            url,
+            index: index + 1,
+            filename: meta?.filename || urlFilename,
+            view: meta?.view || "axial",
+            isKeySlice,
+            isPrimary: file.file_role === "primary_representative",
+        };
+    });
+
     return {
         id: String(artifact.id),
 
@@ -250,6 +292,10 @@ const mapArtifact = (artifact) => {
         images,
         publicFiles,
         niftiVolumes,
+        sliceMetadata,
+        exampleSlices,
+        montages,
+        primaryRepresentativeUrl: primaryRepFile?.public_url || examples[0] || null,
         created_at: artifact.created_at,
         updated_at: artifact.updated_at,
 
@@ -264,25 +310,6 @@ const mapArtifact = (artifact) => {
         examples,
         thumbnail_url: examples[0] || null,
         modality: defaultModality,
-        modality_metadata:
-            artifact.modality_metadata && Object.keys(artifact.modality_metadata).length > 0
-                ? artifact.modality_metadata
-                : asArray(artifact.remedies).find((r) => r && r.stage === "modality_metadata")?.data ||
-                  (defaultModality === "ASL"
-                      ? {
-                            labeling_time: "1800 ms",
-                            pld: "2000 ms",
-                            readout: "3D GRASE",
-                            labeling_strategy: "PCASL",
-                        }
-                      : defaultModality === "DSC"
-                      ? {
-                            te: "30 ms",
-                            tr: "1500 ms",
-                            flip_angle: "60 deg",
-                            contrast_agent: "Gadolinium-based",
-                        }
-                      : {}),
         scanner: firstText(image?.vendor, "Unknown vendor"),
         vendor: image?.vendor || null,
         sequence: firstText(image?.sequence, "Not specified"),
@@ -301,25 +328,26 @@ const mapArtifact = (artifact) => {
 const requestJson = async (path, options = {}) => {
     const accessToken = await getAccessToken();
     const isFormData = options.body instanceof FormData;
-    const isJsonBody = !isFormData && options.body !== undefined && options.body !== null;
-    const isObjectBody = isJsonBody && typeof options.body === "object";
-
     const headers = {
         Accept: "application/json",
-        ...(isJsonBody ? { "Content-Type": "application/json" } : {}),
+        ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...(options.headers || {}),
     };
 
-    const fetchOptions = {
-        ...options,
-        headers,
-        ...(isObjectBody ? { body: JSON.stringify(options.body) } : {}),
-    };
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}${path}`, {
+            ...options,
+            headers,
+        });
+    } catch (err) {
+        throw new Error(
+            "Cannot connect to the AURA API backend server (http://127.0.0.1:8000). Ensure the FastAPI backend server is running."
+        );
+    }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
-
-    if (response.status === 404 || response.status === 204) {
+    if (response.status === 404) {
         return null;
     }
     if (!response.ok) {
@@ -418,11 +446,15 @@ export const createSubmission = async ({
     remedies,
     references,
     submitterNotes,
-    permissionConfirmed,
-    pseudonymisationConfirmed,
+    permissionConfirmed = true,
+    pseudonymisationConfirmed = true,
     saveAsDraft = false,
     files = [],
-    modalityMetadata,
+    primaryIndex = 0,
+    axialMontageFile = null,
+    coronalMontageFile = null,
+    sagittalMontageFile = null,
+    sliceMetadata,
 }) => {
     const formData = new FormData();
     const fields = {
@@ -439,10 +471,11 @@ export const createSubmission = async ({
         remedies,
         references,
         submitter_notes: submitterNotes,
-        modality_metadata: JSON.stringify(modalityMetadata || {}),
+        slice_metadata: sliceMetadata ? JSON.stringify(sliceMetadata) : null,
         permission_confirmed: permissionConfirmed ? "true" : "false",
         pseudonymisation_confirmed: pseudonymisationConfirmed ? "true" : "false",
         save_as_draft: saveAsDraft ? "true" : "false",
+        primary_index: String(primaryIndex),
     };
 
     Object.entries(fields).forEach(([key, value]) => {
@@ -451,11 +484,19 @@ export const createSubmission = async ({
         }
     });
 
-    asArray(files).forEach((file) => {
-        if (file instanceof File || file instanceof Blob) {
-            formData.append("files", file, file.name || "upload");
-        }
+    files.forEach((file) => {
+        formData.append("files", file);
     });
+
+    if (axialMontageFile) {
+        formData.append("axial_montage", axialMontageFile);
+    }
+    if (coronalMontageFile) {
+        formData.append("coronal_montage", coronalMontageFile);
+    }
+    if (sagittalMontageFile) {
+        formData.append("sagittal_montage", sagittalMontageFile);
+    }
 
     return requestJson("/submissions", {
         method: "POST",
@@ -463,28 +504,23 @@ export const createSubmission = async ({
     });
 };
 
-export const fetchMetadataSchema = async (modality) => {
-    const query = modality ? `?modality=${encodeURIComponent(modality)}` : "";
-    return requestJson(`/metadata-schema${query}`);
-};
+export const fetchMetadataSchema = async (modality) =>
+    requestJson(`/metadata-schema${buildQueryString(modality ? { modality } : {})}`);
 
-export const createMetadataField = async (fieldPayload) => {
-    return requestJson("/metadata-schema", {
+export const createMetadataField = async (payload) =>
+    requestJson("/metadata-schema", {
         method: "POST",
-        body: fieldPayload,
+        body: JSON.stringify(payload),
     });
-};
 
-export const updateMetadataField = async (fieldId, fieldPayload) => {
-    return requestJson(`/metadata-schema/${fieldId}`, {
+export const updateMetadataField = async (fieldId, payload) =>
+    requestJson(`/metadata-schema/${encodeURIComponent(fieldId)}`, {
         method: "PUT",
-        body: fieldPayload,
+        body: JSON.stringify(payload),
     });
-};
 
-export const deleteMetadataField = async (fieldId) => {
-    return requestJson(`/metadata-schema/${fieldId}`, {
+export const deleteMetadataField = async (fieldId) =>
+    requestJson(`/metadata-schema/${encodeURIComponent(fieldId)}`, {
         method: "DELETE",
     });
-};
 

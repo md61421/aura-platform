@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "PATH=\"/home/md-sahil/.nvm/versions/node/v22.22.1/bin:$PATH\" vite",
+    "build": "PATH=\"/home/md-sahil/.nvm/versions/node/v22.22.1/bin:$PATH\" vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "PATH=\"/home/md-sahil/.nvm/versions/node/v22.22.1/bin:$PATH\" vite preview"
   },
   "dependencies": {
     "@niivue/niivue": "^0.69.0",
