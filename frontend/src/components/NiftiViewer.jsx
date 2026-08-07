@@ -280,15 +280,6 @@ function NiftiViewer({ artifact, placeholder }) {
     setCrosshairWidth((prev) => (prev === 0 ? 1 : 0));
   };
 
-  const jumpToKeySlice = () => {
-    if (keySliceIndices.length === 0) return;
-    const nextKeyIndex = keySliceIndices.find((idx) => idx > safeActiveImageIndex);
-    if (nextKeyIndex !== undefined) {
-      setActiveImageIndex(nextKeyIndex);
-    } else {
-      setActiveImageIndex(keySliceIndices[0]);
-    }
-  };
 
   /* Empty state */
   if (volumes.length === 0 && exampleSlices.length === 0) {

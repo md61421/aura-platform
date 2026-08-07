@@ -341,7 +341,7 @@ const requestJson = async (path, options = {}) => {
             ...options,
             headers,
         });
-    } catch (err) {
+    } catch {
         throw new Error(
             "Cannot connect to the AURA API backend server (http://127.0.0.1:8000). Ensure the FastAPI backend server is running."
         );

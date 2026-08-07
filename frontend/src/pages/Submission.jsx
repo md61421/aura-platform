@@ -97,12 +97,11 @@ function Submission() {
   const {
     isAuthenticated,
     loading: authLoading,
-    user,
   } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [slices, setSlices] = useState([]);
-  const [primarySliceId, setPrimarySliceId] = useState(null);
+  const [primarySliceId] = useState(null);
   const [axialMontageFile, setAxialMontageFile] = useState(null);
   const [coronalMontageFile, setCoronalMontageFile] = useState(null);
   const [sagittalMontageFile, setSagittalMontageFile] = useState(null);
@@ -299,11 +298,6 @@ function Submission() {
     }
   };
 
-  const handleDrop = (event) => {
-    event.preventDefault();
-    setDragActive(false);
-    addFiles(event.dataTransfer.files);
-  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
