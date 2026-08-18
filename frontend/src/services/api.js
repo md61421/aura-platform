@@ -240,8 +240,11 @@ const mapArtifact = (artifact) => {
             file_type: file.file_type,
             relationship_type: file.image_relationship_type,
         }));
-    const reliabilityScore = Number(image?.reliability_score || 0);
-    const votes = reliabilityVotesFromScore(reliabilityScore);
+
+    const reliabilityScore = Number(artifact.reliability_score ?? image?.reliability_score ?? 0);
+    const fallbackVotes = reliabilityVotesFromScore(reliabilityScore);
+    const agreements = Number(artifact.agreements ?? fallbackVotes.agreements);
+    const disagreements = Number(artifact.disagreements ?? fallbackVotes.disagreements);
     const dateAddedRaw = artifact.created_at || artifact.updated_at || null;
 
     let sliceMetadata = [];
@@ -319,8 +322,9 @@ const mapArtifact = (artifact) => {
         date_added_raw: dateAddedRaw,
         status: statusLabel(artifact.status),
         reliability_score: reliabilityScore,
-        agreements: votes.agreements,
-        disagreements: votes.disagreements,
+        agreements,
+        disagreements,
+        user_vote: artifact.user_vote || null,
         raw: artifact,
     };
 };
@@ -354,6 +358,10 @@ const requestJson = async (path, options = {}) => {
         throw new Error(await parseApiError(response));
     }
 
+    if (response.status === 204) {
+        return true;
+    }
+
     return response.json();
 };
 
@@ -379,6 +387,31 @@ export const fetchArtifactById = async (id) => {
     const artifact = await requestJson(`/artifacts/${encodeURIComponent(id)}`);
     return artifact ? mapArtifact(artifact) : null;
 };
+
+export const fetchArtifactVoteSummary = async (artifactId) =>
+    requestJson(`/artifacts/${encodeURIComponent(artifactId)}/vote-summary`);
+
+export const voteArtifact = async (artifactId, voteType) =>
+    requestJson(`/artifacts/${encodeURIComponent(artifactId)}/vote`, {
+        method: "POST",
+        body: JSON.stringify({ vote_type: voteType }),
+    });
+
+export const fetchArtifactComments = async (artifactId) => {
+    const comments = await requestJson(`/artifacts/${encodeURIComponent(artifactId)}/comments`);
+    return asArray(comments);
+};
+
+export const createArtifactComment = async (artifactId, text) =>
+    requestJson(`/artifacts/${encodeURIComponent(artifactId)}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: text }),
+    });
+
+export const deleteComment = async (commentId) =>
+    requestJson(`/comments/${encodeURIComponent(commentId)}`, {
+        method: "DELETE",
+    });
 
 export const fetchCurrentUser = async () => requestJson("/auth/me");
 
@@ -523,4 +556,3 @@ export const deleteMetadataField = async (fieldId) =>
     requestJson(`/metadata-schema/${encodeURIComponent(fieldId)}`, {
         method: "DELETE",
     });
-
