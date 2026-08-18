@@ -40,7 +40,6 @@ function Detail() {
   const [disagreements, setDisagreements] = useState(0);
   const [userVote, setUserVote] = useState(null);
   const [voteFeedback, setVoteFeedback] = useState(null);
-  const [isVoting, setIsVoting] = useState(false);
 
   // Comments states
   const [comments, setComments] = useState([]);
@@ -133,27 +132,65 @@ function Detail() {
       return;
     }
 
-    if (isVoting) return;
+    // Capture previous state for rollback if request fails
+    const prevVote = userVote;
+    const prevAgreements = agreements;
+    const prevDisagreements = disagreements;
 
-    setIsVoting(true);
-    setVoteFeedback(null);
+    // Calculate optimistic state immediately (0ms UI latency)
+    let nextVote = null;
+    let nextAgreements = prevAgreements;
+    let nextDisagreements = prevDisagreements;
+
+    if (prevVote === voteType) {
+      // Toggle off / retract
+      nextVote = null;
+      if (voteType === "agree") {
+        nextAgreements = Math.max(0, prevAgreements - 1);
+      } else {
+        nextDisagreements = Math.max(0, prevDisagreements - 1);
+      }
+    } else {
+      // Switching or casting new vote
+      if (prevVote === "agree") {
+        nextAgreements = Math.max(0, prevAgreements - 1);
+      } else if (prevVote === "disagree") {
+        nextDisagreements = Math.max(0, prevDisagreements - 1);
+      }
+
+      nextVote = voteType;
+      if (voteType === "agree") {
+        nextAgreements += 1;
+      } else {
+        nextDisagreements += 1;
+      }
+    }
+
+    // Instant optimistic update
+    setUserVote(nextVote);
+    setAgreements(nextAgreements);
+    setDisagreements(nextDisagreements);
+    setVoteFeedback(
+      nextVote
+        ? `Vote registered: ${nextVote === "agree" ? "Agree" : "Disagree"}`
+        : "Vote retracted."
+    );
 
     try {
       const summary = await voteArtifact(artifact.id, voteType);
       if (summary) {
+        // Sync with canonical server state
         setAgreements(summary.agreements);
         setDisagreements(summary.disagreements);
         setUserVote(summary.user_vote);
-        setVoteFeedback(
-          summary.user_vote
-            ? `Vote registered: ${summary.user_vote === "agree" ? "Agree" : "Disagree"}`
-            : "Vote retracted."
-        );
       }
     } catch (err) {
-      setVoteFeedback(err.message || "Failed to update vote.");
+      // Rollback on network/auth failure
+      setUserVote(prevVote);
+      setAgreements(prevAgreements);
+      setDisagreements(prevDisagreements);
+      setVoteFeedback(err.message || "Failed to update vote. Reverted.");
     } finally {
-      setIsVoting(false);
       setTimeout(() => setVoteFeedback(null), 3000);
     }
   };
@@ -336,7 +373,6 @@ function Detail() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
                   onClick={() => handleVote("agree")}
-                  disabled={isVoting}
                   className={`flex-1 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs ${
                     userVote === "agree"
                       ? "border-emerald-400 bg-emerald-500 text-white shadow-emerald-200"
@@ -349,7 +385,6 @@ function Detail() {
                 </button>
                 <button
                   onClick={() => handleVote("disagree")}
-                  disabled={isVoting}
                   className={`flex-1 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs ${
                     userVote === "disagree"
                       ? "border-rose-400 bg-rose-500 text-white shadow-rose-200"

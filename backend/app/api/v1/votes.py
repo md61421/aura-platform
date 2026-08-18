@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import get_current_user_optional, get_db_session, require_user
@@ -21,7 +21,6 @@ def _get_primary_image_for_artifact(db: Session, artifact_id: UUID) -> tuple[Art
         .options(
             selectinload(Artifact.image_links)
             .selectinload(ImageArtifact.image)
-            .selectinload(Image.votes)
         )
     )
     artifact = db.scalar(statement)
@@ -46,48 +45,32 @@ def _get_primary_image_for_artifact(db: Session, artifact_id: UUID) -> tuple[Art
     return artifact, primary_image
 
 
-def _compute_vote_summary(
+def _fetch_vote_counts_and_user_vote(
     db: Session,
-    artifact_id: UUID,
-    image: Image,
-    user: User | None = None,
-) -> VoteSummaryRead:
-    agreements_count = db.scalar(
-        select(func.count(Vote.id)).where(
-            Vote.image_id == image.id,
-            Vote.vote_type == VoteType.AGREE,
-        )
-    ) or 0
+    image_id: UUID,
+    user_id: UUID | None = None,
+) -> tuple[int, int, VoteType | None]:
+    counts_query = select(
+        func.coalesce(func.sum(case((Vote.vote_type == VoteType.AGREE, 1), else_=0)), 0).label("agreements"),
+        func.coalesce(func.sum(case((Vote.vote_type == VoteType.DISAGREE, 1), else_=0)), 0).label("disagreements"),
+    ).where(Vote.image_id == image_id)
 
-    disagreements_count = db.scalar(
-        select(func.count(Vote.id)).where(
-            Vote.image_id == image.id,
-            Vote.vote_type == VoteType.DISAGREE,
-        )
-    ) or 0
-
-    image.reliability_score = agreements_count - disagreements_count
-    db.commit()
+    row = db.execute(counts_query).one()
+    agreements_count = int(row.agreements)
+    disagreements_count = int(row.disagreements)
 
     user_vote = None
-    if user:
+    if user_id:
         existing_vote = db.scalar(
-            select(Vote).where(
-                Vote.image_id == image.id,
-                Vote.user_id == user.id,
+            select(Vote.vote_type).where(
+                Vote.image_id == image_id,
+                Vote.user_id == user_id,
             )
         )
         if existing_vote:
-            user_vote = existing_vote.vote_type
+            user_vote = existing_vote
 
-    return VoteSummaryRead(
-        artifact_id=artifact_id,
-        image_id=image.id,
-        agreements=agreements_count,
-        disagreements=disagreements_count,
-        reliability_score=image.reliability_score,
-        user_vote=user_vote,
-    )
+    return agreements_count, disagreements_count, user_vote
 
 
 @router.get("/artifacts/{artifact_id}/vote-summary", response_model=VoteSummaryRead)
@@ -97,7 +80,21 @@ def get_artifact_vote_summary(
     db: Session = Depends(get_db_session),
 ) -> VoteSummaryRead:
     artifact, image = _get_primary_image_for_artifact(db, artifact_id)
-    return _compute_vote_summary(db, artifact.id, image, current_user)
+    agreements, disagreements, user_vote = _fetch_vote_counts_and_user_vote(
+        db,
+        image.id,
+        current_user.id if current_user else None,
+    )
+    reliability_score = agreements - disagreements
+
+    return VoteSummaryRead(
+        artifact_id=artifact.id,
+        image_id=image.id,
+        agreements=agreements,
+        disagreements=disagreements,
+        reliability_score=reliability_score,
+        user_vote=user_vote,
+    )
 
 
 @router.post(
@@ -135,5 +132,21 @@ def cast_or_toggle_artifact_vote(
         )
         db.add(new_vote)
 
+    db.flush()
+
+    agreements, disagreements, user_vote = _fetch_vote_counts_and_user_vote(
+        db,
+        image.id,
+        current_user.id,
+    )
+    image.reliability_score = agreements - disagreements
     db.commit()
-    return _compute_vote_summary(db, artifact.id, image, current_user)
+
+    return VoteSummaryRead(
+        artifact_id=artifact.id,
+        image_id=image.id,
+        agreements=agreements,
+        disagreements=disagreements,
+        reliability_score=image.reliability_score,
+        user_vote=user_vote,
+    )

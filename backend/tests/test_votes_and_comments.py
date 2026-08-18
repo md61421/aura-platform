@@ -29,25 +29,34 @@ class FakeVotesSession:
         self.deleted = []
         self.committed = False
 
+    def execute(self, statement):
+        class Row:
+            def __init__(self, agreements, disagreements):
+                self.agreements = agreements
+                self.disagreements = disagreements
+
+        class Result:
+            def __init__(self, row):
+                self._row = row
+
+            def one(self):
+                return self._row
+
+        agreements = sum(1 for v in self.votes if v.vote_type == VoteType.AGREE)
+        disagreements = sum(1 for v in self.votes if v.vote_type == VoteType.DISAGREE)
+        return Result(Row(agreements, disagreements))
+
     def scalar(self, statement):
         statement_str = str(statement).lower()
         if "artifacts" in statement_str:
             return self.artifact
-        if "count" in statement_str:
-            params = statement.compile().params
-            vote_val = next(
-                (v for v in params.values() if isinstance(v, (VoteType, str)) and str(getattr(v, "value", v)).lower() in {"agree", "disagree"}),
-                None,
-            )
-            if vote_val:
-                target_type = VoteType(getattr(vote_val, "value", vote_val))
-                return sum(1 for v in self.votes if v.vote_type == target_type)
-            return len(self.votes)
         if "votes" in statement_str:
             params = statement.compile().params
             user_id = next((v for k, v in params.items() if "user_id" in k), None)
             for v in self.votes:
                 if user_id is None or v.user_id == user_id:
+                    if "votes.vote_type" in statement_str and "select votes.vote_type" in statement_str:
+                        return v.vote_type
                     return v
             return None
         return None
@@ -88,6 +97,9 @@ class FakeVotesSession:
         if obj in self.comments:
             self.comments.remove(obj)
         self.deleted.append(obj)
+
+    def flush(self):
+        pass
 
     def commit(self):
         self.committed = True
