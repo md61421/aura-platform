@@ -590,7 +590,8 @@ function Detail() {
               )}
             </div>
 
-            {/* Bottom Actions */}
+            {/* Bottom Actions (Hidden for current testing milestone; can be re-enabled later) */}
+            {/*
             <div className="mt-auto pt-6 border-t border-gray-200 flex gap-4">
               <button
                 onClick={() => navigate("/compare")}
@@ -611,6 +612,7 @@ function Detail() {
                 <i className="fas fa-arrow-down"></i> Download Data
               </button>
             </div>
+            */}
           </div>
         </div>
       </div>
