@@ -45,7 +45,6 @@ function Detail() {
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [commentError, setCommentError] = useState("");
 
   useEffect(() => {
@@ -197,33 +196,61 @@ function Detail() {
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!commentText.trim() || isSubmittingComment) return;
+    const textToPost = commentText.trim();
+    if (!textToPost) return;
 
     if (!isAuthenticated) {
       setCommentError("Please sign in to leave a comment.");
       return;
     }
 
-    setIsSubmittingComment(true);
+    const tempId = `temp-${Date.now()}`;
+    const optimisticComment = {
+      id: tempId,
+      image_id: artifact.id,
+      user_id: auraUser?.id || null,
+      author_name: auraUser?.name || auraUser?.email || "You",
+      author_role: auraUser?.role || "contributor",
+      body: textToPost,
+      status: "visible",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_author: true,
+    };
+
+    // Instant optimistic update: clear input and append comment immediately (0ms)
+    setCommentText("");
     setCommentError("");
+    setComments((prev) => [...prev, optimisticComment]);
 
     try {
-      const newComment = await createArtifactComment(artifact.id, commentText.trim());
-      setComments((prev) => [...prev, newComment]);
-      setCommentText("");
+      const newComment = await createArtifactComment(artifact.id, textToPost);
+      if (newComment) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === tempId ? newComment : c))
+        );
+      }
     } catch (err) {
-      setCommentError(err.message || "Failed to post comment.");
-    } finally {
-      setIsSubmittingComment(false);
+      // Rollback on failure
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+      setCommentText(textToPost);
+      setCommentError(err.message || "Failed to post comment. Reverted.");
     }
   };
 
   const handleDeleteComment = async (commentId) => {
+    const deletedComment = comments.find((c) => c.id === commentId);
+    // Instant optimistic removal
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+
     try {
       await deleteComment(commentId);
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
-      alert(err.message || "Failed to delete comment.");
+      // Rollback if deletion fails
+      if (deletedComment) {
+        setComments((prev) => [...prev, deletedComment]);
+      }
+      alert(err.message || "Failed to delete comment. Reverted.");
     }
   };
 
@@ -464,7 +491,7 @@ function Detail() {
                         ? "Add clinical observation, acquisition parameter note, or discussion point..."
                         : "Sign in to leave a comment or observation..."
                     }
-                    disabled={!isAuthenticated || isSubmittingComment}
+                    disabled={!isAuthenticated}
                     className="w-full text-sm p-3.5 bg-gray-50 border border-gray-250 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all resize-none text-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                   <div className="mt-2 flex items-center justify-between">
@@ -484,20 +511,11 @@ function Detail() {
                     )}
                     <button
                       type="submit"
-                      disabled={!isAuthenticated || !commentText.trim() || isSubmittingComment}
+                      disabled={!isAuthenticated || !commentText.trim()}
                       className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs rounded-xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
                     >
-                      {isSubmittingComment ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          Posting...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-paper-plane text-[10px]"></i>
-                          Post Note
-                        </>
-                      )}
+                      <i className="fas fa-paper-plane text-[10px]"></i>
+                      Post Note
                     </button>
                   </div>
                 </div>

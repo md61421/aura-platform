@@ -48,6 +48,8 @@ class FakeVotesSession:
 
     def scalar(self, statement):
         statement_str = str(statement).lower()
+        if "image_artifacts" in statement_str:
+            return self.image.id if self.image else None
         if "artifacts" in statement_str:
             return self.artifact
         if "votes" in statement_str:
@@ -65,6 +67,9 @@ class FakeVotesSession:
         class ScalarResult:
             def __init__(self, items):
                 self._items = items
+
+            def unique(self):
+                return self
 
             def all(self):
                 return self._items

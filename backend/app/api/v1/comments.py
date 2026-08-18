@@ -1,48 +1,40 @@
+from datetime import UTC, datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case, select
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_current_user_optional, get_db_session, require_user
 from app.core.exceptions import forbidden_exception, not_found_exception
-from app.db.models import Artifact, Comment, Image, ImageArtifact, User
+from app.db.models import Comment, ImageArtifact, User
 from app.db.models.enums import CommentStatus, ImageArtifactRelationshipType, UserRole
 from app.schemas.comment import CommentCreateRequest, CommentItemRead
 
 router = APIRouter()
 
 
-def _get_primary_image_for_artifact(db: Session, artifact_id: UUID) -> tuple[Artifact, Image]:
+def _get_primary_image_id_for_artifact(db: Session, artifact_id: UUID) -> UUID:
     statement = (
-        select(Artifact)
-        .where(Artifact.id == artifact_id)
-        .options(
-            selectinload(Artifact.image_links)
-            .selectinload(ImageArtifact.image)
+        select(ImageArtifact.image_id)
+        .where(ImageArtifact.artifact_id == artifact_id)
+        .order_by(
+            case(
+                (
+                    ImageArtifact.relationship_type
+                    == ImageArtifactRelationshipType.PRIMARY,
+                    0,
+                ),
+                else_=1,
+            )
         )
+        .limit(1)
     )
-    artifact = db.scalar(statement)
-    if not artifact:
-        raise not_found_exception("Artifact")
-
-    primary_image = None
-    for link in artifact.image_links:
-        if link.image and link.relationship_type == ImageArtifactRelationshipType.PRIMARY:
-            primary_image = link.image
-            break
-
-    if not primary_image and artifact.image_links:
-        for link in artifact.image_links:
-            if link.image:
-                primary_image = link.image
-                break
-
-    if not primary_image:
+    image_id = db.scalar(statement)
+    if not image_id:
         raise not_found_exception("Artifact image")
-
-    return artifact, primary_image
+    return image_id
 
 
 @router.get("/artifacts/{artifact_id}/comments", response_model=list[CommentItemRead])
@@ -51,12 +43,12 @@ def list_artifact_comments(
     current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
     db: Session = Depends(get_db_session),
 ) -> list[CommentItemRead]:
-    artifact, image = _get_primary_image_for_artifact(db, artifact_id)
+    image_id = _get_primary_image_id_for_artifact(db, artifact_id)
 
     statement = (
         select(Comment)
-        .where(Comment.image_id == image.id)
-        .options(selectinload(Comment.user))
+        .where(Comment.image_id == image_id)
+        .options(joinedload(Comment.user))
         .order_by(Comment.created_at.asc())
     )
 
@@ -65,7 +57,7 @@ def list_artifact_comments(
     if not is_privileged:
         statement = statement.where(Comment.status == CommentStatus.VISIBLE)
 
-    comments = db.scalars(statement).all()
+    comments = db.scalars(statement).unique().all()
 
     results: list[CommentItemRead] = []
     for comment in comments:
@@ -115,30 +107,34 @@ def create_artifact_comment(
             detail="Comment body cannot be empty.",
         )
 
-    artifact, image = _get_primary_image_for_artifact(db, artifact_id)
-
+    image_id = _get_primary_image_id_for_artifact(db, artifact_id)
+    now = datetime.now(UTC)
+    comment_id = uuid4()
     author_name = current_user.name or current_user.email or "Contributor"
+
     comment = Comment(
-        image_id=image.id,
+        id=comment_id,
+        image_id=image_id,
         user_id=current_user.id,
         author_name=author_name,
         body=body_clean,
         status=CommentStatus.VISIBLE,
+        created_at=now,
+        updated_at=now,
     )
     db.add(comment)
     db.commit()
-    db.refresh(comment)
 
     return CommentItemRead(
-        id=comment.id,
-        image_id=comment.image_id,
-        user_id=comment.user_id,
+        id=comment_id,
+        image_id=image_id,
+        user_id=current_user.id,
         author_name=author_name,
         author_role=current_user.role.value if current_user.role else None,
-        body=comment.body,
-        status=comment.status,
-        created_at=comment.created_at,
-        updated_at=comment.updated_at,
+        body=body_clean,
+        status=CommentStatus.VISIBLE,
+        created_at=now,
+        updated_at=now,
         is_author=True,
     )
 
