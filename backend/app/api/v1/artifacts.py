@@ -1,14 +1,15 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Text, cast, false, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.dependencies import get_db_session
+from app.core.dependencies import get_current_user_optional, get_db_session
 from app.core.exceptions import not_found_exception
 from app.core.workflow import PUBLIC_ARTIFACT_STATUSES
-from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Tag
-from app.db.models.enums import ArtifactStatus, ImageVisibilityStatus, Modality
+from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Tag, User, Vote
+from app.db.models.enums import ArtifactStatus, ImageArtifactRelationshipType, ImageVisibilityStatus, Modality, VoteType
 from app.schemas.artifact import (
     ArtifactDetailRead,
     ArtifactSummaryRead,
@@ -28,6 +29,9 @@ def _artifact_options():
         selectinload(Artifact.image_links)
         .selectinload(ImageArtifact.image)
         .selectinload(Image.files),
+        selectinload(Artifact.image_links)
+        .selectinload(ImageArtifact.image)
+        .selectinload(Image.votes),
     )
 
 
@@ -39,27 +43,22 @@ def _tag_names(artifact: Artifact) -> list[str]:
     )
 
 
-def _artifact_summary(artifact: Artifact) -> ArtifactSummaryRead:
-    submitter_notes = None
+def _artifact_votes(
+    artifact: Artifact,
+    current_user_id: UUID | None = None,
+) -> tuple[int, int, int, VoteType | None]:
     for image_link in artifact.image_links:
-        if image_link.image and image_link.image.submission and image_link.image.submission.submitter_notes:
-            submitter_notes = image_link.image.submission.submitter_notes
-            break
-
-    return ArtifactSummaryRead(
-        id=artifact.id,
-        title=artifact.title,
-        aliases=artifact.aliases,
-        explanation=artifact.explanation,
-        visual_description=artifact.visual_description,
-        default_modality=artifact.default_modality,
-        status=artifact.status,
-        tags=_tag_names(artifact),
-        images=_public_image_summaries(artifact),
-        submitter_notes=submitter_notes,
-        created_at=artifact.created_at,
-        updated_at=artifact.updated_at,
-    )
+        image = image_link.image
+        if not image:
+            continue
+        if image_link.relationship_type == ImageArtifactRelationshipType.PRIMARY or len(artifact.image_links) == 1:
+            agreements = sum(1 for v in image.votes if v.vote_type == VoteType.AGREE)
+            disagreements = sum(1 for v in image.votes if v.vote_type == VoteType.DISAGREE)
+            user_vote = None
+            if current_user_id:
+                user_vote = next((v.vote_type for v in image.votes if v.user_id == current_user_id), None)
+            return agreements, disagreements, agreements - disagreements, user_vote
+    return 0, 0, 0, None
 
 
 def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
@@ -112,8 +111,43 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
     return summaries
 
 
-def _artifact_detail(artifact: Artifact) -> ArtifactDetailRead:
-    summary = _artifact_summary(artifact)
+def _artifact_summary(
+    artifact: Artifact,
+    current_user_id: UUID | None = None,
+) -> ArtifactSummaryRead:
+    submitter_notes = None
+    for image_link in artifact.image_links:
+        if image_link.image and image_link.image.submission and image_link.image.submission.submitter_notes:
+            submitter_notes = image_link.image.submission.submitter_notes
+            break
+
+    agreements, disagreements, reliability_score, user_vote = _artifact_votes(artifact, current_user_id)
+
+    return ArtifactSummaryRead(
+        id=artifact.id,
+        title=artifact.title,
+        aliases=artifact.aliases,
+        explanation=artifact.explanation,
+        visual_description=artifact.visual_description,
+        default_modality=artifact.default_modality,
+        status=artifact.status,
+        tags=_tag_names(artifact),
+        images=_public_image_summaries(artifact),
+        submitter_notes=submitter_notes,
+        agreements=agreements,
+        disagreements=disagreements,
+        reliability_score=reliability_score,
+        user_vote=user_vote,
+        created_at=artifact.created_at,
+        updated_at=artifact.updated_at,
+    )
+
+
+def _artifact_detail(
+    artifact: Artifact,
+    current_user_id: UUID | None = None,
+) -> ArtifactDetailRead:
+    summary = _artifact_summary(artifact, current_user_id)
     return ArtifactDetailRead(
         **summary.model_dump(),
         remedies=artifact.remedies,
@@ -123,6 +157,7 @@ def _artifact_detail(artifact: Artifact) -> ArtifactDetailRead:
 @router.get("", response_model=list[ArtifactSummaryRead])
 def list_artifacts(
     db: Session = Depends(get_db_session),
+    current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None),
@@ -159,12 +194,14 @@ def list_artifacts(
 
     statement = statement.order_by(Artifact.title).offset(skip).limit(limit)
     artifacts = db.scalars(statement).unique().all()
-    return [_artifact_summary(artifact) for artifact in artifacts]
+    user_id = current_user.id if current_user else None
+    return [_artifact_summary(artifact, user_id) for artifact in artifacts]
 
 
 @router.get("/{artifact_id}", response_model=ArtifactDetailRead)
 def get_artifact(
     artifact_id: UUID,
+    current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
     db: Session = Depends(get_db_session),
 ):
     statement = (
@@ -177,4 +214,5 @@ def get_artifact(
     if not artifact:
         raise not_found_exception("Artifact")
 
-    return _artifact_detail(artifact)
+    user_id = current_user.id if current_user else None
+    return _artifact_detail(artifact, user_id)

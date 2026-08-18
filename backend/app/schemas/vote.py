@@ -17,8 +17,21 @@ class ContributorVoteCreate(BaseModel):
     vote_type: VoteType
 
 
+class VoteRequest(BaseModel):
+    vote_type: VoteType
+
+
 class VoteRead(VoteCreate):
     model_config = from_attributes
 
     id: UUID
     created_at: datetime
+
+
+class VoteSummaryRead(BaseModel):
+    artifact_id: UUID | None = None
+    image_id: UUID
+    agreements: int
+    disagreements: int
+    reliability_score: int
+    user_vote: VoteType | None = None

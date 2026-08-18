@@ -1,9 +1,22 @@
 from fastapi import APIRouter
 
-from app.api.v1 import artifacts, auth, contributor, health, metadata_schema, review, submissions, tags
+from app.api.v1 import (
+    artifacts,
+    auth,
+    comments,
+    contributor,
+    health,
+    metadata_schema,
+    review,
+    submissions,
+    tags,
+    votes,
+)
 
 api_router = APIRouter()
 api_router.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
+api_router.include_router(votes.router, tags=["votes"])
+api_router.include_router(comments.router, tags=["comments"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(contributor.router, prefix="/contributor", tags=["contributor"])
 api_router.include_router(health.router, prefix="/health", tags=["health"])

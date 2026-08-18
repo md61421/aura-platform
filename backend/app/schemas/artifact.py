@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.db.models.enums import ArtifactStatus, Modality
+from app.db.models.enums import ArtifactStatus, Modality, VoteType
 from app.schemas.common import from_attributes
 
 
@@ -58,6 +58,10 @@ class ArtifactSummaryRead(BaseModel):
     tags: list[str] = Field(default_factory=list)
     images: list[PublicImageSummaryRead] = Field(default_factory=list)
     submitter_notes: str | None = None
+    agreements: int = 0
+    disagreements: int = 0
+    reliability_score: int = 0
+    user_vote: VoteType | None = None
     created_at: datetime
     updated_at: datetime
 

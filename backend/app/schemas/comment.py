@@ -16,7 +16,11 @@ class CommentCreate(BaseModel):
 
 
 class ContributorCommentCreate(BaseModel):
-    body: str = Field(min_length=2, max_length=4000)
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class CommentCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
 
 
 class CommentRead(CommentCreate):
@@ -25,3 +29,18 @@ class CommentRead(CommentCreate):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class CommentItemRead(BaseModel):
+    model_config = from_attributes
+
+    id: UUID
+    image_id: UUID
+    user_id: UUID | None = None
+    author_name: str
+    author_role: str | None = None
+    body: str
+    status: CommentStatus = CommentStatus.VISIBLE
+    created_at: datetime
+    updated_at: datetime
+    is_author: bool = False
