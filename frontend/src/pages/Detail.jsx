@@ -349,6 +349,14 @@ function Detail() {
                   {artifact.date_added || "Not available"}
                 </span>
               </div>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 col-span-2 sm:col-span-1">
+                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+                  Submitted By
+                </span>
+                <span className="font-medium text-gray-900 truncate block" title={artifact.submitted_by || "OSIPI Team"}>
+                  {artifact.submitted_by || "OSIPI Team"}
+                </span>
+              </div>
             </div>
 
             <div className="mb-8">

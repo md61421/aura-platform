@@ -99,6 +99,21 @@ const ArtifactCard = ({ artifact }) => {
                         Score: {reliability > 0 ? `+${reliability}` : reliability}
                     </span>
                 </div>
+
+                {/* Submitter Info */}
+                <div className="mt-3.5 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
+                    <span className="truncate max-w-[70%] flex items-center gap-1.5" title={artifact.submitted_by ? `Submitted by ${artifact.submitted_by}` : 'OSIPI Perfusion'}>
+                        <i className="far fa-user-circle text-gray-400 text-xs flex-shrink-0"></i>
+                        <span className="truncate">
+                            Submitted by <strong className="font-medium text-gray-700">{artifact.submitted_by || 'OSIPI Team'}</strong>
+                        </span>
+                    </span>
+                    {artifact.date_added && (
+                        <span className="text-gray-400 text-[10px] flex-shrink-0">
+                            {artifact.date_added}
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );

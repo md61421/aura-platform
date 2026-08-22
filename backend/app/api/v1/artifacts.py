@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.dependencies import get_current_user_optional, get_db_session
 from app.core.exceptions import not_found_exception
 from app.core.workflow import PUBLIC_ARTIFACT_STATUSES
-from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Tag, User, Vote
+from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Submission, Tag, User, Vote
 from app.db.models.enums import ArtifactStatus, ImageArtifactRelationshipType, ImageVisibilityStatus, Modality, VoteType
 from app.schemas.artifact import (
     ArtifactDetailRead,
@@ -25,7 +25,8 @@ def _artifact_options():
         selectinload(Artifact.tag_links).selectinload(ArtifactTag.tag),
         selectinload(Artifact.image_links)
         .selectinload(ImageArtifact.image)
-        .selectinload(Image.submission),
+        .selectinload(Image.submission)
+        .selectinload(Submission.submitted_by),
         selectinload(Artifact.image_links)
         .selectinload(ImageArtifact.image)
         .selectinload(Image.files),
@@ -116,10 +117,20 @@ def _artifact_summary(
     current_user_id: UUID | None = None,
 ) -> ArtifactSummaryRead:
     submitter_notes = None
+    submitted_by = None
+
     for image_link in artifact.image_links:
-        if image_link.image and image_link.image.submission and image_link.image.submission.submitter_notes:
-            submitter_notes = image_link.image.submission.submitter_notes
-            break
+        if image_link.image and image_link.image.submission:
+            sub = image_link.image.submission
+            if not submitter_notes and sub.submitter_notes:
+                submitter_notes = sub.submitter_notes
+            if not submitted_by:
+                if sub.submitted_by:
+                    submitted_by = sub.submitted_by.name or sub.submitted_by.email
+                elif sub.contact_email:
+                    submitted_by = sub.contact_email
+            if submitter_notes and submitted_by:
+                break
 
     agreements, disagreements, reliability_score, user_vote = _artifact_votes(artifact, current_user_id)
 
@@ -134,6 +145,7 @@ def _artifact_summary(
         tags=_tag_names(artifact),
         images=_public_image_summaries(artifact),
         submitter_notes=submitter_notes,
+        submitted_by=submitted_by,
         agreements=agreements,
         disagreements=disagreements,
         reliability_score=reliability_score,

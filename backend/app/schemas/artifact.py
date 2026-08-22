@@ -58,6 +58,7 @@ class ArtifactSummaryRead(BaseModel):
     tags: list[str] = Field(default_factory=list)
     images: list[PublicImageSummaryRead] = Field(default_factory=list)
     submitter_notes: str | None = None
+    submitted_by: str | None = None
     agreements: int = 0
     disagreements: int = 0
     reliability_score: int = 0
