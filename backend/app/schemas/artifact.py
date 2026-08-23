@@ -44,6 +44,7 @@ class PublicImageSummaryRead(BaseModel):
     field_strength: str | None = None
     reliability_score: int
     relationship_type: str
+    modality_metadata: dict[str, Any] = Field(default_factory=dict)
     files: list[PublicImageFileRead] = Field(default_factory=list)
 
 

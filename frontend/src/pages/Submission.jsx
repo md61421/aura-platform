@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { createSubmission } from "../services/api";
+import { createSubmission, fetchMetadataSchema } from "../services/api";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES = 500;
@@ -68,7 +68,7 @@ const formatFileSize = (bytes) => {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 };
 
-const validateSubmission = (form, slices) => {
+const validateSubmission = (form, slices, modalityMetadata = {}, modalitySchemaFields = []) => {
   if (!form.artifactName.trim()) {
     return "Artifact name is required.";
   }
@@ -89,6 +89,16 @@ const validateSubmission = (form, slices) => {
   }
   if (!slices || slices.length === 0) {
     return "Upload at least 1 image slice for this artifact.";
+  }
+  if (Array.isArray(modalitySchemaFields)) {
+    for (const field of modalitySchemaFields) {
+      if (field.is_required || field.required) {
+        const val = modalityMetadata?.[field.key];
+        if (val === undefined || val === null || String(val).trim() === "") {
+          return `Please provide a value for required parameter "${field.label || field.key}".`;
+        }
+      }
+    }
   }
   return "";
 };
@@ -116,6 +126,46 @@ function Submission() {
   const [submitAction, setSubmitAction] = useState("publish");
   const [formError, setFormError] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [modalitySchemaFields, setModalitySchemaFields] = useState([]);
+  const [loadingSchema, setLoadingSchema] = useState(false);
+  const [modalityMetadata, setModalityMetadata] = useState({});
+
+  useEffect(() => {
+    if (!form.modality) {
+      setModalitySchemaFields([]);
+      return;
+    }
+    let isMounted = true;
+    setLoadingSchema(true);
+    fetchMetadataSchema(form.modality)
+      .then((data) => {
+        if (isMounted) {
+          const fields = Array.isArray(data) ? data : [];
+          const filtered = fields.filter(
+            (f) => !f.modality || f.modality === form.modality || f.modality === "ALL"
+          );
+          setModalitySchemaFields(filtered);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load modality metadata schema:", err);
+        if (isMounted) setModalitySchemaFields([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingSchema(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.modality]);
+
+  const updateModalityMetadata = (key, value) => {
+    setModalityMetadata((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
 
   const updateField = (event) => {
     const { checked, name, type, value } = event.target;
@@ -131,6 +181,7 @@ function Submission() {
     });
     setForm(INITIAL_FORM);
     setSlices([]);
+    setModalityMetadata({});
     setActiveViewTab("axial");
     setUploadTargetView("axial");
     setPreviewSliceId(null);
@@ -313,7 +364,7 @@ function Submission() {
 
     const symptomsForSubmit = normaliseTags([...form.symptoms, tagInput]);
     const payload = { ...form, symptoms: symptomsForSubmit };
-    const validationError = validateSubmission(payload, slices);
+    const validationError = validateSubmission(payload, slices, modalityMetadata, modalitySchemaFields);
 
     if (validationError) {
       setFormError(validationError);
@@ -336,6 +387,7 @@ function Submission() {
     try {
       const submissionReceipt = await createSubmission({
         ...payload,
+        modalityMetadata,
         saveAsDraft: action === "draft",
         files: rawFiles,
         primaryIndex,
@@ -1003,6 +1055,73 @@ function Submission() {
                 value={form.sequence}
               />
             </div>
+
+            {/* Dynamic Modality Metadata Schema Fields */}
+            {form.modality && (
+              <div className="sm:col-span-2 rounded-2xl border border-brand-200/80 bg-brand-50/20 p-5 sm:p-6 shadow-xs transition-all">
+                <div className="flex flex-wrap items-center justify-between border-b border-brand-100/80 pb-3.5 mb-4 gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold shadow-2xs">
+                      <i className="fas fa-sliders"></i>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-gray-900">
+                        {form.modality || "Perfusion"} Acquisition Parameters
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        Pulse sequence and acquisition settings for this scan
+                      </p>
+                    </div>
+                  </div>
+                  {loadingSchema && (
+                    <span className="text-xs text-brand-600 font-semibold flex items-center gap-1.5">
+                      <i className="fas fa-spinner fa-spin"></i> Loading schema...
+                    </span>
+                  )}
+                </div>
+
+                {modalitySchemaFields.length === 0 && !loadingSchema ? (
+                  <p className="text-xs text-gray-400 italic">
+                    No custom parameters configured for {form.modality}.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {modalitySchemaFields.map((field) => (
+                      <div key={field.key} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <label
+                            htmlFor={`meta_${field.key}`}
+                            className="block text-xs font-bold text-gray-700 truncate"
+                            title={field.label}
+                          >
+                            {field.label}
+                            {(field.is_required || field.required) && (
+                              <span className="text-red-500 ml-1 font-bold">*</span>
+                            )}
+                          </label>
+                          {field.unit && (
+                            <span className="text-[11px] font-bold text-brand-700 bg-brand-50 border border-brand-200/70 px-1.5 py-0.5 rounded flex-shrink-0">
+                              {field.unit}
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            id={`meta_${field.key}`}
+                            type={field.field_type === "number" || field.type === "number" ? "number" : "text"}
+                            step="any"
+                            value={modalityMetadata[field.key] ?? ""}
+                            onChange={(e) => updateModalityMetadata(field.key, e.target.value)}
+                            placeholder={field.example ? `e.g., ${field.example}` : `Enter ${field.label.toLowerCase()}...`}
+                            className="p-3 block w-full rounded-xl border border-gray-300 bg-white text-gray-900 text-sm focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-colors"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700" htmlFor="symptoms">

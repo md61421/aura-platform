@@ -389,6 +389,28 @@ def test_create_submission_with_slice_metadata(monkeypatch, tmp_path):
     assert parsed_notes["slice_metadata"] == slice_info
 
 
+def test_create_submission_with_modality_metadata(monkeypatch, tmp_path):
+    db = FakeWriteSession()
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
+    monkeypatch.setattr(settings, "DEV_AUTO_APPROVE_SUBMISSIONS", True)
+
+    meta = {"pld": 1800, "labeling_duration": 1500, "bolus_arrival_time": 1200}
+    response = submissions.create_submission(
+        **valid_submission_kwargs(
+            db=db,
+            files=[make_upload()],
+            modality_metadata=json.dumps(meta),
+        )
+    )
+
+    assert response["image"]["modality_metadata"] == meta
+    image = next(obj for obj in db.objects if isinstance(obj, Image))
+    assert image.modality_metadata == meta
+    submission = next(obj for obj in db.objects if isinstance(obj, Submission))
+    parsed_notes = json.loads(submission.submitter_notes)
+    assert parsed_notes["modality_metadata"] == meta
+
+
 def test_create_submission_attaches_logged_in_user(monkeypatch):
     db = FakeWriteSession()
     current_user = make_user()

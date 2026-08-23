@@ -302,6 +302,7 @@ def _submission_summary(submission: Submission) -> MySubmissionRead:
                 protocol=image.protocol,
                 field_strength=image.field_strength,
                 visibility_status=image.visibility_status,
+                modality_metadata=image.modality_metadata or {},
             )
             if image
             else None
@@ -446,6 +447,8 @@ def update_my_submission(
     image.sequence = _clean_text(payload.sequence)
     image.protocol = _clean_text(payload.protocol)
     image.field_strength = _clean_text(payload.field_strength)
+    if payload.modality_metadata is not None:
+        image.modality_metadata = payload.modality_metadata
 
     _replace_artifact_tags(
         db,
@@ -461,6 +464,7 @@ def update_my_submission(
         {
             "category": category_name,
             "symptoms": deduped_symptoms,
+            "modality_metadata": image.modality_metadata,
         },
         indent=2,
     )
@@ -555,6 +559,7 @@ def create_submission(
     remedies: Annotated[str | None, Form()] = None,
     references: Annotated[str | None, Form()] = None,
     submitter_notes: Annotated[str | None, Form()] = None,
+    modality_metadata: Annotated[str | None, Form()] = None,
     slice_metadata: Annotated[str | None, Form()] = None,
     save_as_draft: Annotated[bool, Form()] = False,
     db: Session = Depends(get_db_session),
@@ -593,6 +598,13 @@ def create_submission(
         except Exception:
             parsed_slice_metadata = []
 
+    parsed_modality_metadata = {}
+    if modality_metadata:
+        try:
+            parsed_modality_metadata = json.loads(modality_metadata) if isinstance(modality_metadata, str) else modality_metadata
+        except Exception:
+            parsed_modality_metadata = {}
+
     saved_paths: list[Path] = []
     stored_file_rows: list[tuple[ImageFile, str]] = []
 
@@ -608,6 +620,7 @@ def create_submission(
                 "symptoms": symptom_names,
                 "references": reference_lines,
                 "submitter_notes": _clean_text(submitter_notes),
+                "modality_metadata": parsed_modality_metadata,
                 "slice_metadata": parsed_slice_metadata,
             },
             indent=2,
@@ -635,6 +648,7 @@ def create_submission(
         sequence=_clean_text(sequence),
         protocol=_clean_text(protocol),
         field_strength=_clean_text(field_strength),
+        modality_metadata=parsed_modality_metadata,
         visibility_status=(
             ImageVisibilityStatus.APPROVED_PUBLIC
             if publish_immediately
@@ -774,6 +788,7 @@ def create_submission(
             "protocol": image.protocol,
             "field_strength": image.field_strength,
             "visibility_status": image.visibility_status,
+            "modality_metadata": image.modality_metadata or {},
         },
         "files": [
             {

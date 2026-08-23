@@ -105,6 +105,7 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
                 field_strength=image.field_strength,
                 reliability_score=image.reliability_score,
                 relationship_type=image_link.relationship_type.value,
+                modality_metadata=image.modality_metadata or {},
                 files=public_files,
             )
         )
@@ -160,9 +161,15 @@ def _artifact_detail(
     current_user_id: UUID | None = None,
 ) -> ArtifactDetailRead:
     summary = _artifact_summary(artifact, current_user_id)
+    modality_metadata: dict = {}
+    for image_link in artifact.image_links:
+        if image_link.image and image_link.image.modality_metadata:
+            modality_metadata.update(image_link.image.modality_metadata)
+
     return ArtifactDetailRead(
         **summary.model_dump(),
         remedies=artifact.remedies,
+        modality_metadata=modality_metadata,
     )
 
 

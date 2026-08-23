@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -46,6 +47,7 @@ class SubmittedImageRead(BaseModel):
     protocol: str | None = None
     field_strength: str | None = None
     visibility_status: ImageVisibilityStatus
+    modality_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SubmittedFileRead(BaseModel):
@@ -86,3 +88,4 @@ class SubmissionUpdate(BaseModel):
     field_strength: str | None = None
     symptoms: list[str] = Field(default_factory=list)
     remedies: str | None = None
+    modality_metadata: dict[str, Any] | None = None

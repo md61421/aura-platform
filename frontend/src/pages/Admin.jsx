@@ -1007,6 +1007,20 @@ const Admin = () => {
                   <StatusBadge status={inspectArtifact.backendStatus} />
                 </div>
               </div>
+
+              {inspectArtifact.modality_metadata && Object.keys(inspectArtifact.modality_metadata).length > 0 && (
+                <div>
+                  <span className="font-bold text-gray-700 block mb-1.5">Acquisition Technique Parameters:</span>
+                  <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs">
+                    {Object.entries(inspectArtifact.modality_metadata).map(([k, v]) => (
+                      <div key={k} className="bg-white p-2 rounded-lg border border-gray-100">
+                        <span className="text-gray-500 font-medium block capitalize">{k.replace(/_/g, " ")}:</span>
+                        <span className="font-bold text-gray-900">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-4">

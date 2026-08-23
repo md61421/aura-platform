@@ -7,6 +7,7 @@ import {
   fetchArtifactComments,
   createArtifactComment,
   deleteComment,
+  fetchMetadataSchema,
 } from "../services/api";
 import { useAuth } from "../auth/useAuth";
 
@@ -34,6 +35,7 @@ function Detail() {
 
   const [artifact, setArtifact] = useState(null);
   const [loadedArtifactId, setLoadedArtifactId] = useState(null);
+  const [schemaFields, setSchemaFields] = useState([]);
 
   // Voting states
   const [agreements, setAgreements] = useState(0);
@@ -57,6 +59,15 @@ function Detail() {
           setAgreements(data.agreements ?? 0);
           setDisagreements(data.disagreements ?? 0);
           setUserVote(data.user_vote ?? null);
+          if (data.modality) {
+            fetchMetadataSchema(data.modality)
+              .then((schema) => {
+                if (active && Array.isArray(schema)) {
+                  setSchemaFields(schema);
+                }
+              })
+              .catch(() => {});
+          }
         }
         setLoadedArtifactId(id);
       }
@@ -316,48 +327,98 @@ function Detail() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-8">
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+            <div className="grid grid-cols-2 gap-3.5 mb-6">
+              <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Modality
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-900 text-sm">
                   {artifact.modality || "Unknown"}
                 </span>
               </div>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+              <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Sequence
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-900 text-sm truncate" title={artifact.sequence || "Not specified"}>
                   {artifact.sequence || "Not specified"}
                 </span>
               </div>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+              <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Scanner
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-900 text-sm truncate" title={artifact.scanner || "Unknown vendor"}>
                   {artifact.scanner || "Unknown vendor"}
+                  {artifact.field_strength ? ` (${artifact.field_strength})` : ""}
                 </span>
               </div>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+              <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 flex flex-col justify-between">
+                <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Date Added
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-900 text-sm">
                   {artifact.date_added || "Not available"}
                 </span>
               </div>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 col-span-2 sm:col-span-1">
-                <span className="block text-xs text-gray-500 uppercase tracking-wider mb-1">
+              <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 col-span-2 flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                   Submitted By
                 </span>
-                <span className="font-medium text-gray-900 truncate block" title={artifact.submitted_by || "OSIPI Team"}>
+                <span className="font-bold text-gray-800 text-sm truncate" title={artifact.submitted_by || "OSIPI Team"}>
+                  <i className="far fa-user-circle mr-1.5 text-gray-400 text-xs"></i>
                   {artifact.submitted_by || "OSIPI Team"}
                 </span>
               </div>
             </div>
+
+            {/* Dynamic Modality Technique Parameters Section */}
+            {artifact.modality_metadata && Object.keys(artifact.modality_metadata).length > 0 && (
+              <div className="mb-8 rounded-2xl border border-brand-200/70 bg-gradient-to-br from-brand-50/50 via-white to-gray-50/40 p-5 shadow-xs transition-all">
+                <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-brand-100/80">
+                  <div className="w-8 h-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold shadow-2xs">
+                    <i className="fas fa-sliders"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">
+                      {artifact.modality || "Perfusion"} Acquisition Parameters
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Pulse sequence and acquisition settings for this scan
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {Object.entries(artifact.modality_metadata).map(([key, val]) => {
+                    const schemaDef = schemaFields.find((f) => f.key === key);
+                    const label = schemaDef?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                    const unit = schemaDef?.unit || "";
+
+                    return (
+                      <div
+                        key={key}
+                        className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-2xs transition-all hover:border-gray-300 hover:shadow-xs flex flex-col justify-between min-h-[76px]"
+                      >
+                        <span className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 leading-snug break-words">
+                          {label}
+                        </span>
+                        <div className="flex items-baseline gap-1.5 mt-auto">
+                          <span className="text-lg font-extrabold text-gray-900 tracking-tight">
+                            {val !== null && val !== undefined && val !== "" ? String(val) : "—"}
+                          </span>
+                          {unit && (
+                            <span className="text-xs font-semibold text-gray-500">
+                              {unit}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="mb-8">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
