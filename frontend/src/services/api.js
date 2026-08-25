@@ -328,6 +328,7 @@ const mapArtifact = (artifact) => {
         date_added: formatDisplayDate(dateAddedRaw),
         date_added_raw: dateAddedRaw,
         submitted_by: firstText(artifact.submitted_by, artifact.raw?.submitted_by, image?.submission?.contact_email) || null,
+        submitter_notes: firstText(artifact.submitter_notes, artifact.raw?.submitter_notes, image?.submission?.submitter_notes) || null,
         status: statusLabel(artifact.status),
         reliability_score: reliabilityScore,
         agreements,

@@ -103,7 +103,7 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
                 sequence=image.sequence,
                 protocol=image.protocol,
                 field_strength=image.field_strength,
-                reliability_score=image.reliability_score,
+                reliability_score=image.reliability_score or 0,
                 relationship_type=image_link.relationship_type.value,
                 modality_metadata=image.modality_metadata or {},
                 files=public_files,
@@ -119,32 +119,36 @@ def _artifact_summary(
 ) -> ArtifactSummaryRead:
     submitter_notes = None
     submitted_by = None
+    modality_metadata: dict = {}
 
     for image_link in artifact.image_links:
-        if image_link.image and image_link.image.submission:
-            sub = image_link.image.submission
-            if not submitter_notes and sub.submitter_notes:
-                submitter_notes = sub.submitter_notes
-            if not submitted_by:
-                if sub.submitted_by:
-                    submitted_by = sub.submitted_by.name or sub.submitted_by.email
-                elif sub.contact_email:
-                    submitted_by = sub.contact_email
-            if submitter_notes and submitted_by:
-                break
+        if image_link.image:
+            if image_link.image.modality_metadata:
+                modality_metadata.update(image_link.image.modality_metadata)
+            if image_link.image.submission:
+                sub = image_link.image.submission
+                if not submitter_notes and sub.submitter_notes:
+                    submitter_notes = sub.submitter_notes
+                if not submitted_by:
+                    if sub.submitted_by:
+                        submitted_by = sub.submitted_by.name or sub.submitted_by.email
+                    elif sub.contact_email:
+                        submitted_by = sub.contact_email
 
     agreements, disagreements, reliability_score, user_vote = _artifact_votes(artifact, current_user_id)
 
     return ArtifactSummaryRead(
         id=artifact.id,
         title=artifact.title,
-        aliases=artifact.aliases,
+        aliases=artifact.aliases or [],
         explanation=artifact.explanation,
         visual_description=artifact.visual_description,
         default_modality=artifact.default_modality,
         status=artifact.status,
         tags=_tag_names(artifact),
         images=_public_image_summaries(artifact),
+        remedies=artifact.remedies or [],
+        modality_metadata=modality_metadata,
         submitter_notes=submitter_notes,
         submitted_by=submitted_by,
         agreements=agreements,
@@ -161,16 +165,7 @@ def _artifact_detail(
     current_user_id: UUID | None = None,
 ) -> ArtifactDetailRead:
     summary = _artifact_summary(artifact, current_user_id)
-    modality_metadata: dict = {}
-    for image_link in artifact.image_links:
-        if image_link.image and image_link.image.modality_metadata:
-            modality_metadata.update(image_link.image.modality_metadata)
-
-    return ArtifactDetailRead(
-        **summary.model_dump(),
-        remedies=artifact.remedies,
-        modality_metadata=modality_metadata,
-    )
+    return ArtifactDetailRead(**summary.model_dump())
 
 
 @router.get("", response_model=list[ArtifactSummaryRead])
@@ -201,15 +196,49 @@ def list_artifacts(
             )
         )
     if search:
-        search_pattern = f"%{search.strip()}%"
-        statement = statement.where(
-            or_(
-                Artifact.title.ilike(search_pattern),
-                Artifact.explanation.ilike(search_pattern),
-                Artifact.visual_description.ilike(search_pattern),
-                cast(Artifact.aliases, Text).ilike(search_pattern),
+        tokens = [t.strip() for t in search.strip().split() if t.strip()]
+        for token in tokens:
+            token_pattern = f"%{token}%"
+            statement = statement.where(
+                or_(
+                    Artifact.title.ilike(token_pattern),
+                    Artifact.explanation.ilike(token_pattern),
+                    Artifact.visual_description.ilike(token_pattern),
+                    cast(Artifact.aliases, Text).ilike(token_pattern),
+                    cast(Artifact.remedies, Text).ilike(token_pattern),
+                    cast(Artifact.default_modality, Text).ilike(token_pattern),
+                    cast(Artifact.status, Text).ilike(token_pattern),
+                    Artifact.tag_links.any(
+                        ArtifactTag.tag.has(Tag.name.ilike(token_pattern))
+                    ),
+                    Artifact.image_links.any(
+                        ImageArtifact.image.has(
+                            or_(
+                                Image.title.ilike(token_pattern),
+                                Image.caption.ilike(token_pattern),
+                                Image.vendor.ilike(token_pattern),
+                                Image.sequence.ilike(token_pattern),
+                                Image.protocol.ilike(token_pattern),
+                                Image.field_strength.ilike(token_pattern),
+                                cast(Image.modality, Text).ilike(token_pattern),
+                                cast(Image.modality_metadata, Text).ilike(token_pattern),
+                                Image.submission.has(
+                                    or_(
+                                        Submission.submitter_notes.ilike(token_pattern),
+                                        Submission.contact_email.ilike(token_pattern),
+                                        Submission.submitted_by.has(
+                                            or_(
+                                                User.name.ilike(token_pattern),
+                                                User.email.ilike(token_pattern),
+                                            )
+                                        ),
+                                    )
+                                ),
+                            )
+                        )
+                    ),
+                )
             )
-        )
 
     statement = statement.order_by(Artifact.title).offset(skip).limit(limit)
     artifacts = db.scalars(statement).unique().all()
@@ -235,3 +264,4 @@ def get_artifact(
 
     user_id = current_user.id if current_user else None
     return _artifact_detail(artifact, user_id)
+

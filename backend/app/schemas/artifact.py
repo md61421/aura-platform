@@ -58,6 +58,8 @@ class ArtifactSummaryRead(BaseModel):
     status: ArtifactStatus
     tags: list[str] = Field(default_factory=list)
     images: list[PublicImageSummaryRead] = Field(default_factory=list)
+    remedies: list[dict[str, Any]] = Field(default_factory=list)
+    modality_metadata: dict[str, Any] = Field(default_factory=dict)
     submitter_notes: str | None = None
     submitted_by: str | None = None
     agreements: int = 0
@@ -69,5 +71,4 @@ class ArtifactSummaryRead(BaseModel):
 
 
 class ArtifactDetailRead(ArtifactSummaryRead):
-    remedies: list[dict[str, Any]] = Field(default_factory=list)
-    modality_metadata: dict[str, Any] = Field(default_factory=dict)
+    pass

@@ -12,7 +12,7 @@ function SearchBar({ query, setQuery }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         className="block w-full pl-14 pr-6 py-5 border border-gray-200 rounded-2xl leading-5 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 sm:text-lg shadow-lg hover:shadow-xl transition-all duration-300" 
-        placeholder="Search by signs (e.g., shadows, lines) or example names..."
+        placeholder="Search artifacts, symptoms, sequences, scanner parameters, remedies..."
       />
     </div>
   );

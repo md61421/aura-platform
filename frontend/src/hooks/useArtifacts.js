@@ -15,6 +15,85 @@ const defaultFilters = {
 const uniqueSorted = (values) =>
     [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
+const buildArtifactSearchText = (artifact) => {
+    const parts = [
+        artifact.name,
+        artifact.title,
+        artifact.full_name,
+        artifact.alt_names,
+        Array.isArray(artifact.aliases) ? artifact.aliases.join(" ") : "",
+        artifact.description,
+        artifact.visual_description,
+        artifact.explanation,
+        artifact.category,
+        artifact.modality,
+        artifact.default_modality,
+        artifact.scanner,
+        artifact.vendor,
+        artifact.field_strength,
+        artifact.sequence,
+        artifact.protocol,
+        artifact.status,
+        artifact.backendStatus,
+        artifact.submitted_by,
+        artifact.submitter_notes,
+        artifact.remedies,
+        Array.isArray(artifact.symptoms) ? artifact.symptoms.join(" ") : "",
+        Array.isArray(artifact.tags) ? artifact.tags.join(" ") : "",
+    ];
+
+    // Modality metadata key-values (e.g. "PLD 1800", "labeling_duration 1500")
+    if (artifact.modality_metadata && typeof artifact.modality_metadata === "object") {
+        Object.entries(artifact.modality_metadata).forEach(([k, v]) => {
+            parts.push(k.replace(/_/g, " "));
+            if (v !== null && v !== undefined) {
+                parts.push(String(v));
+            }
+        });
+    }
+
+    // Remedies raw structured entries
+    if (Array.isArray(artifact.remedies_raw)) {
+        artifact.remedies_raw.forEach((rem) => {
+            if (typeof rem === "string") parts.push(rem);
+            else if (rem && typeof rem === "object") {
+                if (rem.stage) parts.push(rem.stage);
+                if (rem.type) parts.push(rem.type);
+                if (rem.text) parts.push(rem.text);
+                if (rem.description) parts.push(rem.description);
+                if (rem.value) parts.push(rem.value);
+            }
+        });
+    }
+
+    // Images and slice metadata details
+    if (Array.isArray(artifact.images)) {
+        artifact.images.forEach((img) => {
+            if (img.title) parts.push(img.title);
+            if (img.caption) parts.push(img.caption);
+            if (img.vendor) parts.push(img.vendor);
+            if (img.sequence) parts.push(img.sequence);
+            if (img.protocol) parts.push(img.protocol);
+            if (img.field_strength) parts.push(img.field_strength);
+            if (img.modality_metadata && typeof img.modality_metadata === "object") {
+                Object.entries(img.modality_metadata).forEach(([k, v]) => {
+                    parts.push(k.replace(/_/g, " "));
+                    if (v !== null && v !== undefined) parts.push(String(v));
+                });
+            }
+        });
+    }
+
+    if (Array.isArray(artifact.sliceMetadata)) {
+        artifact.sliceMetadata.forEach((s) => {
+            if (s.view) parts.push(s.view);
+            if (s.filename) parts.push(s.filename);
+        });
+    }
+
+    return parts.filter(Boolean).join(" ").toLowerCase();
+};
+
 /**
  * Custom hook to manage fetching and filtering artifacts.
  */
@@ -54,15 +133,15 @@ export function useArtifacts() {
     }, []);
 
     const filteredArtifacts = useMemo(() => {
+        const searchTokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+
         const filtered = artifacts.filter((artifact) => {
-            const searchStr = query.toLowerCase();
-            const matchesQuery = (
-                (artifact.name && artifact.name.toLowerCase().includes(searchStr)) ||
-                (artifact.description && artifact.description.toLowerCase().includes(searchStr)) ||
-                (artifact.explanation && artifact.explanation.toLowerCase().includes(searchStr)) ||
-                (artifact.alt_names && artifact.alt_names.toLowerCase().includes(searchStr)) ||
-                (artifact.symptoms && artifact.symptoms.some((s) => s.toLowerCase().includes(searchStr)))
-            );
+            let matchesQuery = true;
+            if (searchTokens.length > 0) {
+                const searchableText = buildArtifactSearchText(artifact);
+                matchesQuery = searchTokens.every((token) => searchableText.includes(token));
+            }
+
             const matchesModality = filters.modalities.length === 0 || filters.modalities.includes(artifact.modality);
             const matchesCategory = filters.categories.length === 0 || filters.categories.includes(artifact.category);
             const matchesScanner = !filters.scanner || artifact.scanner === filters.scanner;

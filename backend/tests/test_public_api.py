@@ -257,6 +257,44 @@ def test_list_artifacts_returns_active_tags_only():
     assert response[0].images[0].files[0].public_url == "http://testserver/uploads/public/list-example.png"
 
 
+def test_list_artifacts_includes_remedies_and_modality_metadata():
+    artifact = make_artifact()
+    artifact.remedies = [{"stage": "Acquisition", "text": "Use head padding"}]
+    image = Image(
+        id=uuid4(),
+        title="Metadata test image",
+        modality=Modality.ASL,
+        vendor="Siemens",
+        sequence="pCASL",
+        field_strength="3T",
+        modality_metadata={"PLD": "1800", "labeling_duration": "1500"},
+        visibility_status=ImageVisibilityStatus.APPROVED_PUBLIC,
+    )
+    artifact.image_links = [
+        ImageArtifact(
+            id=uuid4(),
+            artifact=artifact,
+            image=image,
+            relationship_type=ImageArtifactRelationshipType.PRIMARY,
+        )
+    ]
+    db = FakeReadSession(scalars_items=[artifact])
+
+    response = artifacts.list_artifacts(
+        db=db,
+        skip=0,
+        limit=20,
+        search="Siemens 3T 1800 padding",
+        modality=None,
+        status=ArtifactStatus.APPROVED,
+        tag=None,
+    )
+
+    assert len(response) == 1
+    assert response[0].remedies == [{"stage": "Acquisition", "text": "Use head padding"}]
+    assert response[0].modality_metadata == {"PLD": "1800", "labeling_duration": "1500"}
+
+
 def test_get_artifact_detail_returns_public_files_only():
     artifact = make_artifact()
     image = Image(
