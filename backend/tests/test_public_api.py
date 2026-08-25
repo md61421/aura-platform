@@ -450,21 +450,20 @@ def test_create_submission_can_save_private_draft(monkeypatch, tmp_path):
     assert db.committed is True
 
 
-def test_create_submission_does_not_publish_nifti_files(monkeypatch, tmp_path):
+def test_create_submission_rejects_nifti_files(monkeypatch, tmp_path):
     db = FakeWriteSession()
     monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
 
-    submissions.create_submission(
-        **valid_submission_kwargs(
-            db=db,
-            files=[make_upload("volume.nii", b"nifti-bytes")],
+    with pytest.raises(HTTPException) as exc_info:
+        submissions.create_submission(
+            **valid_submission_kwargs(
+                db=db,
+                files=[make_upload("volume.nii", b"nifti-bytes")],
+            )
         )
-    )
 
-    image_file = next(obj for obj in db.objects if isinstance(obj, ImageFile))
-    assert image_file.file_type == FileType.NIFTI
-    assert image_file.is_public is False
-    assert image_file.public_url is None
+    assert exc_info.value.status_code == 400
+    assert "not a supported upload type" in exc_info.value.detail
 
 
 def test_submission_route_requires_authenticated_contributor():

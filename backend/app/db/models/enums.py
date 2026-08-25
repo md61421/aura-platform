@@ -78,6 +78,7 @@ class FileType(str, Enum):
 
 class StorageProvider(str, Enum):
     AWS_S3 = "aws_s3"
+    SUPABASE_STORAGE = "supabase_storage"
     AZURE_BLOB = "azure_blob"
     LOCAL_DEV = "local_dev"
     OTHER = "other"

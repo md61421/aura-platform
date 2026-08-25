@@ -13,6 +13,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.dependencies import get_db_session, require_contributor
 from app.core.exceptions import bad_request_exception, forbidden_exception, not_found_exception
+from app.core.storage import (
+    content_type_for_file_type,
+    get_public_url as get_storage_public_url,
+    get_supabase_client,
+    upload_to_supabase,
+)
 from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, ImageFile, Submission, Tag, User
 from app.db.models.enums import (
     ArtifactStatus,
@@ -106,14 +112,7 @@ def _remedies_from_text(value: str | None) -> list[dict[str, str]]:
 
 def _file_type_for_filename(filename: str) -> FileType:
     lowered = filename.lower()
-    if lowered.endswith(".nii.gz"):
-        return FileType.NII_GZ
-
     suffix = Path(lowered).suffix
-    if suffix == ".nii":
-        return FileType.NIFTI
-    if suffix in {".dcm", ".dicom"}:
-        return FileType.DICOM
     if suffix in {".jpg", ".jpeg"}:
         return FileType.JPG
     if suffix == ".png":
@@ -123,7 +122,7 @@ def _file_type_for_filename(filename: str) -> FileType:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=(
             f"{filename} is not a supported upload type. "
-            "Use DICOM, NIfTI, PNG, or JPG files."
+            "AURA focuses on 2D slice images and montages (PNG or JPG files)."
         ),
     )
 
@@ -153,13 +152,39 @@ def _storage_provider() -> StorageProvider:
         return StorageProvider.OTHER
 
 
-def _public_url_for_upload(request: Request, storage_key: str, file_type: FileType) -> str | None:
+def _public_url_for_upload(
+    request: Request,
+    storage_key: str,
+    file_type: FileType,
+    bucket: str | None = None,
+    storage_provider: StorageProvider | None = None,
+) -> str | None:
     if file_type not in {FileType.JPG, FileType.PNG}:
         return None
-    return str(request.url_for("local_upload", path=storage_key))
+
+    provider = storage_provider or _storage_provider()
+    if provider == StorageProvider.SUPABASE_STORAGE:
+        return get_storage_public_url(
+            storage_key=storage_key,
+            bucket=bucket or settings.APPROVED_STORAGE_BUCKET,
+            storage_provider=StorageProvider.SUPABASE_STORAGE,
+            request=request,
+        )
+
+    return get_storage_public_url(
+        storage_key=storage_key,
+        bucket=bucket or settings.LOCAL_STORAGE_ROOT,
+        storage_provider=StorageProvider.LOCAL_DEV,
+        request=request,
+    )
 
 
-def _store_upload(upload: UploadFile, submission_id: UUID) -> tuple[str, int, str, Path]:
+def _store_upload(
+    upload: UploadFile,
+    submission_id: UUID,
+    target_bucket: str | None = None,
+    file_type: FileType = FileType.OTHER,
+) -> tuple[str, int, str, Path]:
     filename = _safe_filename(upload.filename or "upload")
     storage_key = f"submissions/{submission_id}/{uuid4().hex}-{filename}"
     destination = _storage_root() / storage_key
@@ -196,6 +221,31 @@ def _store_upload(upload: UploadFile, submission_id: UUID) -> tuple[str, int, st
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{upload.filename} is empty.",
         )
+
+    provider = _storage_provider()
+    if provider == StorageProvider.SUPABASE_STORAGE:
+        client = get_supabase_client()
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supabase storage is configured but SUPABASE_SERVICE_ROLE_KEY is missing or invalid.",
+            )
+        try:
+            with destination.open("rb") as f:
+                file_bytes = f.read()
+            upload_to_supabase(
+                bucket=target_bucket or settings.APPROVED_STORAGE_BUCKET,
+                storage_key=storage_key,
+                file_bytes=file_bytes,
+                content_type=content_type_for_file_type(file_type),
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception("Supabase storage upload failed for %s", upload.filename)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to upload {upload.filename} to Supabase Storage: {exc}",
+            )
 
     return storage_key, total_bytes, checksum.hexdigest(), destination
 
@@ -524,6 +574,8 @@ def republish_my_submission(
                 request,
                 image_file.storage_key,
                 image_file.file_type,
+                bucket=image_file.storage_bucket,
+                storage_provider=image_file.storage_provider,
             )
             image_file.is_public = image_file.public_url is not None
         else:
@@ -684,11 +736,22 @@ def create_submission(
         db.add_all([submission, artifact, image])
         db.flush()
 
+        target_bucket = (
+            settings.APPROVED_STORAGE_BUCKET
+            if publish_immediately
+            else settings.PRIVATE_STORAGE_BUCKET
+        )
+
         for idx, (upload, file_type) in enumerate(zip(upload_files, file_types, strict=True)):
-            storage_key, total_bytes, checksum, saved_path = _store_upload(upload, submission.id)
+            storage_key, total_bytes, checksum, saved_path = _store_upload(
+                upload,
+                submission.id,
+                target_bucket=target_bucket,
+                file_type=file_type,
+            )
             saved_paths.append(saved_path)
             public_url = (
-                _public_url_for_upload(request, storage_key, file_type)
+                _public_url_for_upload(request, storage_key, file_type, bucket=target_bucket)
                 if publish_immediately
                 else None
             )
@@ -704,7 +767,7 @@ def create_submission(
                 file_role=role,
                 file_type=file_type,
                 storage_provider=_storage_provider(),
-                storage_bucket=settings.PRIVATE_STORAGE_BUCKET,
+                storage_bucket=target_bucket,
                 storage_key=storage_key,
                 public_url=public_url,
                 is_public=public_url is not None,
@@ -723,10 +786,15 @@ def create_submission(
         for m_upload, m_role in montage_uploads:
             if m_upload and m_upload.filename:
                 m_type = _file_type_for_filename(m_upload.filename)
-                storage_key, total_bytes, checksum, saved_path = _store_upload(m_upload, submission.id)
+                storage_key, total_bytes, checksum, saved_path = _store_upload(
+                    m_upload,
+                    submission.id,
+                    target_bucket=target_bucket,
+                    file_type=m_type,
+                )
                 saved_paths.append(saved_path)
                 public_url = (
-                    _public_url_for_upload(request, storage_key, m_type)
+                    _public_url_for_upload(request, storage_key, m_type, bucket=target_bucket)
                     if publish_immediately
                     else None
                 )
@@ -736,7 +804,7 @@ def create_submission(
                     file_role=m_role,
                     file_type=m_type,
                     storage_provider=_storage_provider(),
-                    storage_bucket=settings.PRIVATE_STORAGE_BUCKET,
+                    storage_bucket=target_bucket,
                     storage_key=storage_key,
                     public_url=public_url,
                     is_public=public_url is not None,

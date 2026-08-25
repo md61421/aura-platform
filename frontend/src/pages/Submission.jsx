@@ -111,7 +111,6 @@ function Submission() {
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [slices, setSlices] = useState([]);
-  const [primarySliceId] = useState(null);
   const [axialMontageFile, setAxialMontageFile] = useState(null);
   const [coronalMontageFile, setCoronalMontageFile] = useState(null);
   const [sagittalMontageFile, setSagittalMontageFile] = useState(null);
@@ -372,7 +371,10 @@ function Submission() {
     }
 
     const rawFiles = slices.map((s) => s.file);
-    const primaryIndex = Math.max(0, slices.findIndex((s) => s.id === primarySliceId));
+    let primaryIndex = slices.findIndex((s) => s.isPriority);
+    if (primaryIndex === -1) {
+      primaryIndex = slices.length > 2 ? Math.floor(slices.length / 2) : 0;
+    }
     const sliceMetadata = slices.map((s, idx) => ({
       filename: s.file.name,
       view: s.view,

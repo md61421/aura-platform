@@ -96,7 +96,12 @@ function NiftiViewer({ artifact, placeholder }) {
   /* Viewer state */
   const [loadedArtifactId, setLoadedArtifactId] = useState(artifactId);
   const [activeVolumeIndex, setActiveVolumeIndex] = useState(0);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeImageIndex, setActiveImageIndex] = useState(() => {
+    const keyIdx = exampleSlices.findIndex((s) => s.isKeySlice);
+    if (keyIdx >= 0) return keyIdx;
+    if (exampleSlices.length > 2) return Math.floor(exampleSlices.length / 2);
+    return 0;
+  });
   const [sliceType, setSliceType] = useState(SLICE_TYPE.MULTIPLANAR);
   const [dragMode, setDragMode] = useState(DRAG_MODE.pan);
   const [colormap, setColormap] = useState("gray");
@@ -119,10 +124,12 @@ function NiftiViewer({ artifact, placeholder }) {
   const activeImage = currentSlice.url || examples[safeActiveImageIndex] || "";
 
   if (loadedArtifactId !== artifactId) {
+    const keyIdx = exampleSlices.findIndex((s) => s.isKeySlice);
+    const initialIndex = keyIdx >= 0 ? keyIdx : (exampleSlices.length > 2 ? Math.floor(exampleSlices.length / 2) : 0);
     setLoadedArtifactId(artifactId);
     setMediaView(volumes.length > 0 ? "volume" : "images");
     setActiveVolumeIndex(0);
-    setActiveImageIndex(0);
+    setActiveImageIndex(initialIndex);
     setActiveViewFilter("all");
     setSliceType(SLICE_TYPE.MULTIPLANAR);
     setDragMode(DRAG_MODE.pan);

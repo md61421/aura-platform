@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     SUPABASE_JWT_AUDIENCE: str = "authenticated"
     SUPABASE_JWT_ISSUER: str | None = None
     SUPABASE_JWKS_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
