@@ -3,20 +3,9 @@ import { supabase } from "../lib/supabase";
 const getApiBaseUrl = () => {
     const configured = import.meta.env.VITE_API_BASE_URL;
     if (configured) {
-        if (typeof window !== "undefined") {
-            const host = window.location.hostname;
-            if (host === "localhost" && configured.includes("127.0.0.1")) {
-                return configured.replace("127.0.0.1", "localhost").replace(/\/$/, "");
-            }
-            if (host === "127.0.0.1" && configured.includes("localhost")) {
-                return configured.replace("localhost", "127.0.0.1").replace(/\/$/, "");
-            }
-        }
         return configured.replace(/\/$/, "");
     }
-    return typeof window !== "undefined" && window.location.hostname === "localhost"
-        ? "http://localhost:8000/api/v1"
-        : "http://127.0.0.1:8000/api/v1";
+    return "http://127.0.0.1:8000/api/v1";
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -367,7 +356,7 @@ const requestJson = async (path, options = {}) => {
     } catch (err) {
         console.error("Fetch request error:", err);
         throw new Error(
-            `Cannot connect to the AURA API backend server (${API_BASE_URL}). Ensure the FastAPI backend server is running.`
+            `Cannot connect to the AURA API backend server (${API_BASE_URL}): ${err?.message || "Network request failed"}. Ensure the FastAPI backend server is reachable.`
         );
     }
 

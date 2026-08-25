@@ -14,6 +14,7 @@ class Settings(BaseSettings):
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "https://aura-platform-frontend.vercel.app",
+            "https://aura-platform-chi.vercel.app",
         ]
     )
     DATABASE_URL: str = Field(

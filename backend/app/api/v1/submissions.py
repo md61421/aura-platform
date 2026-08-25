@@ -142,7 +142,17 @@ def _storage_root() -> Path:
     root = Path(settings.LOCAL_STORAGE_ROOT)
     if not root.is_absolute():
         root = Path.cwd() / root
-    return root
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        test_file = root / ".write_test"
+        test_file.touch(exist_ok=True)
+        test_file.unlink(missing_ok=True)
+        return root
+    except (OSError, PermissionError):
+        import tempfile
+        fallback = Path(tempfile.gettempdir()) / "aura_uploads"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
 
 def _storage_provider() -> StorageProvider:
