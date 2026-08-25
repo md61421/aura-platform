@@ -4,7 +4,7 @@ import { getCategoryStyles } from '../utils/helpers';
 
 const ArtifactCard = ({ artifact }) => {
     const navigate = useNavigate();
-    const { badge, placeholder } = getCategoryStyles(artifact.category);
+    const { placeholder } = getCategoryStyles(artifact.category);
 
     const reliability = (artifact.agreements || 0) - (artifact.disagreements || 0);
     
@@ -57,13 +57,6 @@ const ArtifactCard = ({ artifact }) => {
                         />
                     )}
                 </div>
-                {/* Category Badge - Top Left */}
-                <div className="absolute top-3 left-3 z-20">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${badge}`}>
-                        {artifact.category}
-                    </span>
-                </div>
-
                 {/* Verification Status Badge - Top Right */}
                 <div className="absolute top-3 right-3 z-20">
                     {artifact.status === "OSIPI Verified" ? (

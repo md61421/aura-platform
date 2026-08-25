@@ -116,7 +116,7 @@ function Detail() {
     );
   }
 
-  const { badge, placeholder } = getCategoryStyles(artifact?.category);
+  const { placeholder } = getCategoryStyles(artifact?.category);
 
   // Vote summary
   const reliability = agreements - disagreements;
@@ -295,11 +295,21 @@ function Detail() {
           <div className="p-6 lg:p-8 flex flex-col lg:overflow-y-auto w-full max-h-[calc(100vh-160px)] custom-scrollbar">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <span
-                  className={`inline-block px-3 py-1 rounded-full text-xs font-semibold tracking-wide mb-3 uppercase ${badge}`}
-                >
-                  {artifact.category}
-                </span>
+                <div className="mb-3">
+                  {artifact.status === "OSIPI Verified" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                      <i className="fas fa-circle-check text-xs text-emerald-500"></i> Verified
+                    </span>
+                  ) : artifact.status === "Flagged" ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                      <i className="fas fa-circle-exclamation text-xs text-rose-500"></i> Flagged
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium tracking-wide uppercase bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                      <i className="fas fa-users text-xs text-slate-500"></i> Contributor
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
                   {artifact.name}
                 </h2>
