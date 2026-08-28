@@ -36,11 +36,14 @@ export function AuthProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      setAuraUser(null);
-      setAuraUserError("");
       setLoading(false);
+
+      if (event === "SIGNED_OUT" || !nextSession) {
+        setAuraUser(null);
+        setAuraUserError("");
+      }
     });
 
     return () => {
@@ -73,7 +76,7 @@ export function AuthProvider({ children }) {
     return () => {
       active = false;
     };
-  }, [session?.access_token]);
+  }, [session?.access_token, session?.user?.id]);
 
   const auraUserLoading = Boolean(session?.access_token) && !auraUser && !auraUserError;
 
