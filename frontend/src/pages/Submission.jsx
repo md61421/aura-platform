@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { createSubmission, fetchArtifacts, fetchMetadataSchema } from "../services/api";
@@ -105,6 +105,8 @@ function Submission() {
   } = useAuth();
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const scannerDropdownRef = useRef(null);
+  const sequenceDropdownRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [slices, setSlices] = useState([]);
   const [axialMontageFile, setAxialMontageFile] = useState(null);
@@ -125,9 +127,11 @@ function Submission() {
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [modalityMetadata, setModalityMetadata] = useState({});
 
-  // Artifact name autocomplete suggestions & auto-fill state
+  // Autocomplete suggestions state
   const [existingArtifacts, setExistingArtifacts] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showScannerSuggestions, setShowScannerSuggestions] = useState(false);
+  const [showSequenceSuggestions, setShowSequenceSuggestions] = useState(false);
   const [autoFilledFrom, setAutoFilledFrom] = useState(null);
 
   useEffect(() => {
@@ -152,6 +156,12 @@ function Submission() {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowSuggestions(false);
+      }
+      if (scannerDropdownRef.current && !scannerDropdownRef.current.contains(event.target)) {
+        setShowScannerSuggestions(false);
+      }
+      if (sequenceDropdownRef.current && !sequenceDropdownRef.current.contains(event.target)) {
+        setShowSequenceSuggestions(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -216,6 +226,64 @@ function Submission() {
     setShowSuggestions(false);
   };
 
+  // Dynamic Scanner Suggestions from already submitted artifacts
+  const scannerSuggestions = useMemo(() => {
+    const set = new Set();
+
+    existingArtifacts.forEach((art) => {
+      if (art.vendor && typeof art.vendor === "string" && art.vendor.trim()) {
+        set.add(art.vendor.trim());
+      }
+      if (art.scanner && typeof art.scanner === "string" && art.scanner.trim()) {
+        set.add(art.scanner.trim());
+      }
+      if (Array.isArray(art.images)) {
+        art.images.forEach((img) => {
+          if (img.vendor && typeof img.vendor === "string" && img.vendor.trim()) {
+            set.add(img.vendor.trim());
+          }
+          if (img.scanner && typeof img.scanner === "string" && img.scanner.trim()) {
+            set.add(img.scanner.trim());
+          }
+        });
+      }
+    });
+
+    return Array.from(set).sort();
+  }, [existingArtifacts]);
+
+  // Dynamic Sequence Suggestions from already submitted artifacts
+  const sequenceSuggestions = useMemo(() => {
+    const set = new Set();
+
+    existingArtifacts.forEach((art) => {
+      if (art.sequence && typeof art.sequence === "string" && art.sequence.trim()) {
+        set.add(art.sequence.trim());
+      }
+      if (Array.isArray(art.images)) {
+        art.images.forEach((img) => {
+          if (img.sequence && typeof img.sequence === "string" && img.sequence.trim()) {
+            set.add(img.sequence.trim());
+          }
+        });
+      }
+    });
+
+    return Array.from(set).sort();
+  }, [existingArtifacts]);
+
+  const filteredScannerSuggestions = form.scanner.trim()
+    ? scannerSuggestions.filter((item) =>
+        item.toLowerCase().includes(form.scanner.trim().toLowerCase())
+      )
+    : scannerSuggestions;
+
+  const filteredSequenceSuggestions = form.sequence.trim()
+    ? sequenceSuggestions.filter((item) =>
+        item.toLowerCase().includes(form.sequence.trim().toLowerCase())
+      )
+    : sequenceSuggestions;
+
   const updateModalityMetadata = (key, value) => {
     setModalityMetadata((current) => ({
       ...current,
@@ -247,6 +315,8 @@ function Submission() {
     setFormError("");
     setReceipt(null);
     setShowSuggestions(false);
+    setShowScannerSuggestions(false);
+    setShowSequenceSuggestions(false);
     setAutoFilledFrom(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -1138,34 +1208,90 @@ function Submission() {
               </select>
             </div>
 
-            <div>
+            <div className="relative" ref={scannerDropdownRef}>
               <label className="block text-sm font-medium text-gray-700" htmlFor="scanner">
                 Scanner
               </label>
               <input
+                autoComplete="off"
                 className={fieldClass}
                 id="scanner"
                 name="scanner"
-                onChange={updateField}
-                placeholder="e.g., Scanner 1"
+                onFocus={() => setShowScannerSuggestions(true)}
+                onChange={(e) => {
+                  updateField(e);
+                  setShowScannerSuggestions(true);
+                }}
+                placeholder="e.g., Siemens Prisma (3T)"
                 type="text"
                 value={form.scanner}
               />
+
+              {/* Custom Scanner Suggestions Dropdown */}
+              {showScannerSuggestions && filteredScannerSuggestions.length > 0 && (
+                <div className="absolute z-40 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl divide-y divide-gray-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-3 py-1.5 bg-gray-50/90 text-[10px] font-semibold text-gray-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
+                    Previously Submitted Scanners ({filteredScannerSuggestions.length})
+                  </div>
+                  {filteredScannerSuggestions.slice(0, 10).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-gray-800 hover:bg-brand-50 hover:text-brand-700 transition-colors flex items-center gap-2 cursor-pointer"
+                      onClick={() => {
+                        setForm((c) => ({ ...c, scanner: item }));
+                        setShowScannerSuggestions(false);
+                      }}
+                    >
+                      <i className="fas fa-server text-gray-400 text-[10px]"></i>
+                      <span className="truncate">{item}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div>
+            <div className="relative" ref={sequenceDropdownRef}>
               <label className="block text-sm font-medium text-gray-700" htmlFor="sequence">
                 Sequence
               </label>
               <input
+                autoComplete="off"
                 className={fieldClass}
                 id="sequence"
                 name="sequence"
-                onChange={updateField}
+                onFocus={() => setShowSequenceSuggestions(true)}
+                onChange={(e) => {
+                  updateField(e);
+                  setShowSequenceSuggestions(true);
+                }}
                 placeholder="e.g., 3D GRASE"
                 type="text"
                 value={form.sequence}
               />
+
+              {/* Custom Sequence Suggestions Dropdown */}
+              {showSequenceSuggestions && filteredSequenceSuggestions.length > 0 && (
+                <div className="absolute z-40 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl divide-y divide-gray-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-3 py-1.5 bg-gray-50/90 text-[10px] font-semibold text-gray-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
+                    Previously Submitted Sequences ({filteredSequenceSuggestions.length})
+                  </div>
+                  {filteredSequenceSuggestions.slice(0, 10).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-gray-800 hover:bg-brand-50 hover:text-brand-700 transition-colors flex items-center gap-2 cursor-pointer"
+                      onClick={() => {
+                        setForm((c) => ({ ...c, sequence: item }));
+                        setShowSequenceSuggestions(false);
+                      }}
+                    >
+                      <i className="fas fa-wave-square text-gray-400 text-[10px]"></i>
+                      <span className="truncate">{item}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Dynamic Modality Metadata Schema Fields */}
