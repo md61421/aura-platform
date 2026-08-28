@@ -601,11 +601,11 @@ def republish_my_submission(
 def create_submission(
     request: Request,
     artifact_name: Annotated[str, Form(min_length=2, max_length=255)],
-    contact_email: Annotated[str, Form(max_length=320)],
     modality: Annotated[Modality, Form()],
     category: Annotated[str, Form(min_length=2, max_length=120)],
     description: Annotated[str, Form(min_length=10)],
     current_user: Annotated[User, Depends(require_contributor)],
+    contact_email: Annotated[str | None, Form(max_length=320)] = None,
     permission_confirmed: Annotated[bool, Form()] = True,
     pseudonymisation_confirmed: Annotated[bool, Form()] = True,
     files: Annotated[list[UploadFile] | None, File()] = None,
@@ -626,8 +626,8 @@ def create_submission(
     save_as_draft: Annotated[bool, Form()] = False,
     db: Session = Depends(get_db_session),
 ):
-    email = contact_email.strip().lower()
-    if not EMAIL_PATTERN.match(email):
+    email = (contact_email or current_user.email or "").strip().lower()
+    if not email or not EMAIL_PATTERN.match(email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Enter a valid contact email address.",

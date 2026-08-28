@@ -9,7 +9,6 @@ const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 
 const INITIAL_FORM = {
   artifactName: "",
-  contactEmail: "",
   modality: "",
   category: "",
   scanner: "",
@@ -72,12 +71,6 @@ const validateSubmission = (form, slices, modalityMetadata = {}, modalitySchemaF
   if (!form.artifactName.trim()) {
     return "Artifact name is required.";
   }
-  if (!form.contactEmail.trim()) {
-    return "Contact email is required.";
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail.trim())) {
-    return "Enter a valid contact email address.";
-  }
   if (!form.modality) {
     return "Select a modality.";
   }
@@ -107,6 +100,8 @@ function Submission() {
   const {
     isAuthenticated,
     loading: authLoading,
+    user,
+    auraUser,
   } = useAuth();
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -426,7 +421,12 @@ function Submission() {
     }
 
     const symptomsForSubmit = normaliseTags([...form.symptoms, tagInput]);
-    const payload = { ...form, symptoms: symptomsForSubmit };
+    const userEmail = auraUser?.email || user?.email || "";
+    const payload = {
+      ...form,
+      contactEmail: userEmail,
+      symptoms: symptomsForSubmit,
+    };
     const validationError = validateSubmission(payload, slices, modalityMetadata, modalitySchemaFields);
 
     if (validationError) {
@@ -1018,10 +1018,18 @@ function Submission() {
           </div>
 
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-            <div className="relative" ref={dropdownRef}>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="artifactName">
-                Artifact Name
-              </label>
+            <div className="sm:col-span-2 relative" ref={dropdownRef}>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="artifactName">
+                  Artifact Name
+                </label>
+                {(auraUser?.email || user?.email) && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <i className="fas fa-user-circle text-brand-600"></i>
+                    <span>Submitting as: <strong className="text-gray-800">{auraUser?.email || user?.email}</strong></span>
+                  </span>
+                )}
+              </div>
               <input
                 autoComplete="off"
                 className={fieldClass}
@@ -1086,22 +1094,6 @@ function Submission() {
                   })}
                 </div>
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="contactEmail">
-                Contact Email
-              </label>
-              <input
-                className={fieldClass}
-                id="contactEmail"
-                name="contactEmail"
-                onChange={updateField}
-                placeholder="e.g., researcher@example.org"
-                required
-                type="email"
-                value={form.contactEmail}
-              />
             </div>
 
             <div>
