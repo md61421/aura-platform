@@ -602,9 +602,9 @@ def create_submission(
     request: Request,
     artifact_name: Annotated[str, Form(min_length=2, max_length=255)],
     modality: Annotated[Modality, Form()],
-    category: Annotated[str, Form(min_length=2, max_length=120)],
     description: Annotated[str, Form(min_length=10)],
     current_user: Annotated[User, Depends(require_contributor)],
+    category: Annotated[str | None, Form(max_length=120)] = None,
     contact_email: Annotated[str | None, Form(max_length=320)] = None,
     permission_confirmed: Annotated[bool, Form()] = True,
     pseudonymisation_confirmed: Annotated[bool, Form()] = True,
@@ -642,13 +642,14 @@ def create_submission(
         )
 
     file_types = [_file_type_for_filename(file.filename or "upload") for file in upload_files]
-    category_name = _clean_label(category)
+    category_name = _clean_label(category) if category and category.strip() else None
     symptom_names = _parse_json_or_delimited_list(symptoms)
-    symptom_names = [
-        symptom_name
-        for symptom_name in symptom_names
-        if symptom_name.casefold() != category_name.casefold()
-    ]
+    if category_name:
+        symptom_names = [
+            symptom_name
+            for symptom_name in symptom_names
+            if symptom_name.casefold() != category_name.casefold()
+        ]
     remedy_payload = _remedies_from_text(remedies)
     reference_lines = _parse_lines(references)
     publish_immediately = not save_as_draft
@@ -725,13 +726,14 @@ def create_submission(
         )
     )
 
-    category_tag = _get_or_create_tag(
-        db,
-        category_name,
-        TagType.ARTIFACT_CATEGORY,
-        Modality.ALL,
-    )
-    artifact.tag_links.append(ArtifactTag(tag=category_tag))
+    if category_name:
+        category_tag = _get_or_create_tag(
+            db,
+            category_name,
+            TagType.ARTIFACT_CATEGORY,
+            Modality.ALL,
+        )
+        artifact.tag_links.append(ArtifactTag(tag=category_tag))
 
     for symptom_name in symptom_names:
         symptom_tag = _get_or_create_tag(

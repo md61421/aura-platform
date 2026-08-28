@@ -10,7 +10,6 @@ const ACCEPTED_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 const INITIAL_FORM = {
   artifactName: "",
   modality: "",
-  category: "",
   scanner: "",
   sequence: "",
   protocol: "",
@@ -25,16 +24,6 @@ const INITIAL_FORM = {
 };
 
 const modalityOptions = ["ASL", "DSC", "DCE", "IVIM", "MULTI", "UNKNOWN"];
-const categoryOptions = [
-  "Motion",
-  "Susceptibility",
-  "Hardware/RF",
-  "Flow",
-  "Noise",
-  "Contrast bolus",
-  "Reconstruction",
-  "Other",
-];
 
 const fieldClass =
   "mt-1 p-3 block w-full rounded-xl border border-gray-300 bg-white text-gray-900 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-colors";
@@ -73,9 +62,6 @@ const validateSubmission = (form, slices, modalityMetadata = {}, modalitySchemaF
   }
   if (!form.modality) {
     return "Select a modality.";
-  }
-  if (!form.category) {
-    return "Select a category.";
   }
   if (form.description.trim().length < 10) {
     return "Add a description of at least 10 characters.";
@@ -1088,7 +1074,7 @@ function Submission() {
           </div>
 
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-            <div className="sm:col-span-2 relative" ref={dropdownRef}>
+            <div className="relative" ref={dropdownRef}>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700" htmlFor="artifactName">
                   Artifact Name
@@ -1127,12 +1113,12 @@ function Submission() {
               {showSuggestions && filteredSuggestions.length > 0 && (
                 <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl divide-y divide-gray-100 animate-in fade-in slide-in-from-top-1 duration-150">
                   <div className="px-3 py-1.5 bg-gray-50/90 text-[11px] font-semibold text-gray-500 flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
-                    <span>Existing Catalog Matches ({filteredSuggestions.length})</span>
-                    <span className="text-brand-600 font-medium">Click to auto-fill description</span>
+                    <span>Existing Matches ({filteredSuggestions.length})</span>
+                    <span className="text-brand-600 font-medium">Click to auto-fill</span>
                   </div>
                   {filteredSuggestions.slice(0, 8).map((art) => {
                     const artTitle = art.title || art.name || "Untitled";
-                    const artCategory = art.category || art.default_modality || "Artifact";
+                    const artTag = art.default_modality || "Artifact";
                     const artDesc = art.description || art.visual_description || art.explanation || "";
                     return (
                       <button
@@ -1150,7 +1136,7 @@ function Submission() {
                               {artTitle}
                             </span>
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 group-hover:bg-brand-100 group-hover:text-brand-800 flex-shrink-0">
-                              {artCategory}
+                              {artTag}
                             </span>
                           </div>
                           {artDesc && (
@@ -1180,27 +1166,6 @@ function Submission() {
               >
                 <option value="">Select Modality</option>
                 {modalityOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="category">
-                Category
-              </label>
-              <select
-                className={fieldClass}
-                id="category"
-                name="category"
-                onChange={updateField}
-                required
-                value={form.category}
-              >
-                <option value="">Select Category</option>
-                {categoryOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
