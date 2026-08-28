@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { createSubmission, fetchMetadataSchema } from "../services/api";
+import { createSubmission, fetchArtifacts, fetchMetadataSchema } from "../services/api";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES = 500;
@@ -109,6 +109,7 @@ function Submission() {
     loading: authLoading,
   } = useAuth();
   const fileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [slices, setSlices] = useState([]);
   const [axialMontageFile, setAxialMontageFile] = useState(null);
@@ -128,6 +129,41 @@ function Submission() {
   const [modalitySchemaFields, setModalitySchemaFields] = useState([]);
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [modalityMetadata, setModalityMetadata] = useState({});
+
+  // Artifact name autocomplete suggestions & auto-fill state
+  const [existingArtifacts, setExistingArtifacts] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [autoFilledFrom, setAutoFilledFrom] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchArtifacts({ limit: 100 })
+      .then((data) => {
+        if (isMounted && Array.isArray(data)) {
+          setExistingArtifacts(data);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch existing artifacts for suggestions:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (!form.modality) {
@@ -159,6 +195,32 @@ function Submission() {
     };
   }, [form.modality]);
 
+  const filteredSuggestions = form.artifactName.trim()
+    ? existingArtifacts.filter((item) => {
+        const query = form.artifactName.trim().toLowerCase();
+        const titleMatch = (item.title || item.name || "").toLowerCase().includes(query);
+        const aliasMatch =
+          Array.isArray(item.aliases) &&
+          item.aliases.some((a) => String(a).toLowerCase().includes(query));
+        return titleMatch || aliasMatch;
+      })
+    : [];
+
+  const handleSelectArtifactSuggestion = (artifact) => {
+    const selectedTitle = artifact.title || artifact.name || "";
+    const selectedDescription =
+      artifact.description || artifact.visual_description || artifact.explanation || "";
+
+    setForm((current) => ({
+      ...current,
+      artifactName: selectedTitle,
+      // currently only description should auto fill
+      description: selectedDescription || current.description,
+    }));
+    setAutoFilledFrom(selectedTitle);
+    setShowSuggestions(false);
+  };
+
   const updateModalityMetadata = (key, value) => {
     setModalityMetadata((current) => ({
       ...current,
@@ -189,6 +251,8 @@ function Submission() {
     setTagInput("");
     setFormError("");
     setReceipt(null);
+    setShowSuggestions(false);
+    setAutoFilledFrom(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -954,20 +1018,74 @@ function Submission() {
           </div>
 
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-            <div>
+            <div className="relative" ref={dropdownRef}>
               <label className="block text-sm font-medium text-gray-700" htmlFor="artifactName">
                 Artifact Name
               </label>
               <input
+                autoComplete="off"
                 className={fieldClass}
                 id="artifactName"
                 name="artifactName"
-                onChange={updateField}
-                placeholder="e.g., Zipper Artifact"
+                onFocus={() => {
+                  if (form.artifactName.trim().length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
+                onChange={(e) => {
+                  updateField(e);
+                  setShowSuggestions(true);
+                  if (autoFilledFrom && e.target.value.toLowerCase() !== autoFilledFrom.toLowerCase()) {
+                    setAutoFilledFrom(null);
+                  }
+                }}
+                placeholder="e.g., Zipper Artifact, Fat Shift"
                 required
                 type="text"
                 value={form.artifactName}
               />
+
+              {/* Autocomplete Suggestions Dropdown */}
+              {showSuggestions && filteredSuggestions.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl divide-y divide-gray-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-3 py-1.5 bg-gray-50/90 text-[11px] font-semibold text-gray-500 flex items-center justify-between sticky top-0 z-10 backdrop-blur-xs">
+                    <span>Existing Catalog Matches ({filteredSuggestions.length})</span>
+                    <span className="text-brand-600 font-medium">Click to auto-fill description</span>
+                  </div>
+                  {filteredSuggestions.slice(0, 8).map((art) => {
+                    const artTitle = art.title || art.name || "Untitled";
+                    const artCategory = art.category || art.default_modality || "Artifact";
+                    const artDesc = art.description || art.visual_description || art.explanation || "";
+                    return (
+                      <button
+                        key={art.id || artTitle}
+                        type="button"
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-brand-50/70 focus:bg-brand-50 focus:outline-none transition-colors flex items-start gap-2.5 group cursor-pointer"
+                        onClick={() => handleSelectArtifactSuggestion(art)}
+                      >
+                        <div className="mt-0.5 w-6 h-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center flex-shrink-0 text-xs group-hover:bg-brand-200 transition-colors">
+                          <i className="fas fa-layer-group"></i>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-gray-900 group-hover:text-brand-700 truncate">
+                              {artTitle}
+                            </span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 group-hover:bg-brand-100 group-hover:text-brand-800 flex-shrink-0">
+                              {artCategory}
+                            </span>
+                          </div>
+                          {artDesc && (
+                            <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">
+                              {artDesc}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div>
@@ -1157,14 +1275,27 @@ function Submission() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700" htmlFor="description">
-                Description
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="description">
+                  Description
+                </label>
+                {autoFilledFrom && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200/80 animate-in fade-in duration-200">
+                    <i className="fas fa-check-circle text-brand-600"></i>
+                    <span>Auto-filled from <strong>{autoFilledFrom}</strong></span>
+                  </span>
+                )}
+              </div>
               <textarea
                 className={fieldClass}
                 id="description"
                 name="description"
-                onChange={updateField}
+                onChange={(e) => {
+                  updateField(e);
+                  if (autoFilledFrom) {
+                    setAutoFilledFrom(null);
+                  }
+                }}
                 placeholder="Provide background on the scan, how the artifact was identified, and any other relevant context..."
                 required
                 rows="4"
