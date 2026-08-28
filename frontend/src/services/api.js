@@ -254,15 +254,24 @@ const mapArtifact = (artifact) => {
     const dateAddedRaw = artifact.created_at || artifact.updated_at || null;
 
     let sliceMetadata = [];
+    let submitterNotesText = null;
     try {
         const rawNotes = artifact.submission?.submitter_notes || artifact.submitter_notes || artifact.raw?.submitter_notes;
-        if (typeof rawNotes === "string") {
-            sliceMetadata = JSON.parse(rawNotes).slice_metadata || [];
+        if (typeof rawNotes === "string" && rawNotes.trim().startsWith("{")) {
+            const parsed = JSON.parse(rawNotes);
+            sliceMetadata = parsed.slice_metadata || [];
+            submitterNotesText = parsed.submitter_notes || null;
         } else if (typeof rawNotes === "object" && rawNotes !== null) {
             sliceMetadata = rawNotes.slice_metadata || [];
+            submitterNotesText = rawNotes.submitter_notes || null;
+        } else if (typeof rawNotes === "string" && rawNotes.trim()) {
+            submitterNotesText = rawNotes.trim();
         }
     } catch {
         sliceMetadata = [];
+        submitterNotesText = typeof artifact.submitter_notes === "string" && !artifact.submitter_notes.trim().startsWith("{")
+            ? artifact.submitter_notes
+            : null;
     }
 
     const exampleSlices = representativeFiles.map((file, index) => {
@@ -328,7 +337,7 @@ const mapArtifact = (artifact) => {
         date_added: formatDisplayDate(dateAddedRaw),
         date_added_raw: dateAddedRaw,
         submitted_by: firstText(artifact.submitted_by, artifact.raw?.submitted_by, image?.submission?.contact_email) || null,
-        submitter_notes: firstText(artifact.submitter_notes, artifact.raw?.submitter_notes, image?.submission?.submitter_notes) || null,
+        submitter_notes: submitterNotesText || null,
         status: statusLabel(artifact.status),
         reliability_score: reliabilityScore,
         agreements,

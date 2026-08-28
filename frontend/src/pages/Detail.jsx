@@ -519,6 +519,18 @@ function Detail() {
               )}
             </div>
 
+            {/* Submitter Notes */}
+            {artifact.submitter_notes && (
+              <div className="mb-8">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
+                  Submitter Notes
+                </h4>
+                <div className="text-sm text-gray-600 whitespace-pre-line bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  {artifact.submitter_notes}
+                </div>
+              </div>
+            )}
+
             {/* Remedies & Solutions */}
             <div className="mb-8">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">
