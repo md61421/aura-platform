@@ -436,8 +436,15 @@ export const fetchCurrentUser = async () => requestJson("/auth/me");
 
 export const fetchMySubmissions = async () => requestJson("/submissions/me");
 
-export const updateMySubmission = async (submissionId, payload) =>
-    requestJson(`/submissions/${encodeURIComponent(submissionId)}/edit`, {
+export const updateMySubmission = async (submissionId, payload) => {
+    if (payload instanceof FormData) {
+        return requestJson(`/submissions/${encodeURIComponent(submissionId)}/edit`, {
+            method: "POST",
+            body: payload,
+        });
+    }
+
+    return requestJson(`/submissions/${encodeURIComponent(submissionId)}/edit`, {
         method: "POST",
         body: JSON.stringify({
             artifact_name: payload.artifactName,
@@ -450,8 +457,12 @@ export const updateMySubmission = async (submissionId, payload) =>
             field_strength: payload.fieldStrength,
             symptoms: payload.symptoms || [],
             remedies: payload.remedies,
+            references: payload.references,
+            submitter_notes: payload.submitterNotes,
+            modality_metadata: payload.modalityMetadata || payload.modality_metadata,
         }),
     });
+};
 
 export const withdrawMySubmission = async (submissionId) =>
     requestJson(`/submissions/${encodeURIComponent(submissionId)}`, {

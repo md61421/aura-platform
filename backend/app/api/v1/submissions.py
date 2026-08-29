@@ -15,6 +15,7 @@ from app.core.dependencies import get_db_session, require_contributor
 from app.core.exceptions import bad_request_exception, forbidden_exception, not_found_exception
 from app.core.storage import (
     content_type_for_file_type,
+    delete_storage_file,
     get_public_url as get_storage_public_url,
     get_supabase_client,
     upload_to_supabase,
@@ -34,6 +35,7 @@ from app.db.models.enums import (
 from app.schemas.submission import (
     MySubmissionRead,
     SubmittedArtifactRead,
+    SubmittedFileRead,
     SubmittedImageRead,
     SubmissionReceiptRead,
     SubmissionUpdate,
@@ -331,6 +333,9 @@ def _submission_summary(submission: Submission) -> MySubmissionRead:
         id=submission.id,
         contact_email=submission.contact_email,
         status=submission.status,
+        permission_confirmed=submission.permission_confirmed,
+        pseudonymisation_confirmed=submission.pseudonymisation_confirmed,
+        submitter_notes=submission.submitter_notes,
         submitted_at=submission.submitted_at,
         reviewed_at=submission.reviewed_at,
         created_at=submission.created_at,
@@ -363,6 +368,19 @@ def _submission_summary(submission: Submission) -> MySubmissionRead:
                 field_strength=image.field_strength,
                 visibility_status=image.visibility_status,
                 modality_metadata=image.modality_metadata or {},
+                files=[
+                    SubmittedFileRead(
+                        id=f.id,
+                        filename=f.storage_key.split("/")[-1] if f.storage_key else None,
+                        file_role=f.file_role,
+                        file_type=f.file_type,
+                        file_size_mb=f.file_size_mb,
+                        checksum=f.checksum,
+                        public_url=f.public_url,
+                        storage_key=f.storage_key,
+                    )
+                    for f in (image.files if image else [])
+                ],
             )
             if image
             else None
@@ -457,9 +475,10 @@ def list_my_submissions(
 @router.patch("/{submission_id}", response_model=MySubmissionRead)
 def update_my_submission(
     submission_id: UUID,
-    payload: SubmissionUpdate,
-    current_user: Annotated[User, Depends(require_contributor)],
+    payload: SubmissionUpdate | None = None,
+    current_user: Annotated[User, Depends(require_contributor)] = None,
     db: Session = Depends(get_db_session),
+    request: Request = None,
 ) -> MySubmissionRead:
     submission = _get_owned_submission(db, submission_id, current_user)
     image = _primary_image_for_submission(submission)
@@ -470,61 +489,324 @@ def update_my_submission(
     if artifact.status in {ArtifactStatus.ARCHIVED, ArtifactStatus.REJECTED}:
         raise bad_request_exception("Removed artifacts cannot be edited")
 
-    artifact_name = _clean_label(payload.artifact_name, max_length=255)
-    description = _clean_text(payload.description)
-    if not description or len(description) < 10:
+    content_type = request.headers.get("content-type", "").lower() if request else ""
+
+    artifact_name: str = ""
+    modality: Modality = Modality.UNKNOWN
+    category_name: str | None = None
+    description: str = ""
+    scanner: str | None = None
+    sequence: str | None = None
+    protocol: str | None = None
+    field_strength: str | None = None
+    symptoms_raw: Any = None
+    remedies_raw: str | None = None
+    references_raw: str | None = None
+    submitter_notes_raw: str | None = None
+    modality_metadata_raw: Any = None
+    slice_metadata_raw: Any = None
+    deleted_file_ids_raw: Any = None
+    primary_file_id_str: str | None = None
+    primary_slice_index: int | None = None
+
+    upload_files: list[UploadFile] = []
+    axial_montage: UploadFile | None = None
+    coronal_montage: UploadFile | None = None
+    sagittal_montage: UploadFile | None = None
+
+    if payload is not None:
+        artifact_name = payload.artifact_name
+        modality = payload.modality
+        category_name = _clean_label(payload.category) if payload.category else None
+        description = payload.description
+        scanner = _clean_text(payload.scanner)
+        sequence = _clean_text(payload.sequence)
+        protocol = _clean_text(payload.protocol)
+        field_strength = _clean_text(payload.field_strength)
+        symptoms_raw = payload.symptoms
+        remedies_raw = payload.remedies
+        references_raw = payload.references
+        submitter_notes_raw = payload.submitter_notes
+        modality_metadata_raw = payload.modality_metadata
+    elif request is not None and "multipart/form-data" in content_type:
+        import anyio
+
+        form = anyio.from_thread.run(request.form)
+        artifact_name = str(form.get("artifact_name") or form.get("artifactName") or "")
+        modality_str = str(form.get("modality") or "UNKNOWN")
+        try:
+            modality = Modality(modality_str)
+        except ValueError:
+            modality = Modality.UNKNOWN
+
+        category_name = _clean_label(str(form.get("category") or "")) if form.get("category") else None
+        description = str(form.get("description") or "")
+        scanner = _clean_text(str(form.get("scanner") or "")) if form.get("scanner") else None
+        sequence = _clean_text(str(form.get("sequence") or "")) if form.get("sequence") else None
+        protocol = _clean_text(str(form.get("protocol") or "")) if form.get("protocol") else None
+        field_strength = (
+            _clean_text(str(form.get("field_strength") or form.get("fieldStrength") or ""))
+            if (form.get("field_strength") or form.get("fieldStrength"))
+            else None
+        )
+
+        symptoms_raw = form.get("symptoms")
+        remedies_raw = form.get("remedies")
+        references_raw = form.get("references")
+        submitter_notes_raw = form.get("submitter_notes") or form.get("submitterNotes")
+        modality_metadata_raw = form.get("modality_metadata") or form.get("modalityMetadata")
+        slice_metadata_raw = form.get("slice_metadata") or form.get("sliceMetadata")
+        deleted_file_ids_raw = form.get("deleted_file_ids") or form.get("deletedFileIds")
+        primary_file_id_str = form.get("primary_file_id") or form.get("primaryFileId")
+        if form.get("primary_slice_index") is not None:
+            try:
+                primary_slice_index = int(form.get("primary_slice_index"))
+            except (ValueError, TypeError):
+                primary_slice_index = None
+
+        upload_files = [f for f in form.getlist("files") if isinstance(f, UploadFile) and f.filename]
+        ax = form.get("axial_montage")
+        if isinstance(ax, UploadFile) and ax.filename:
+            axial_montage = ax
+        cor = form.get("coronal_montage")
+        if isinstance(cor, UploadFile) and cor.filename:
+            coronal_montage = cor
+        sag = form.get("sagittal_montage")
+        if isinstance(sag, UploadFile) and sag.filename:
+            sagittal_montage = sag
+    elif request is not None:
+        import anyio
+
+        body = anyio.from_thread.run(request.json)
+        parsed_payload = SubmissionUpdate.model_validate(body)
+        artifact_name = parsed_payload.artifact_name
+        modality = parsed_payload.modality
+        category_name = _clean_label(parsed_payload.category) if parsed_payload.category else None
+        description = parsed_payload.description
+        scanner = _clean_text(parsed_payload.scanner)
+        sequence = _clean_text(parsed_payload.sequence)
+        protocol = _clean_text(parsed_payload.protocol)
+        field_strength = _clean_text(parsed_payload.field_strength)
+        symptoms_raw = parsed_payload.symptoms
+        remedies_raw = parsed_payload.remedies
+        references_raw = parsed_payload.references
+        submitter_notes_raw = parsed_payload.submitter_notes
+        modality_metadata_raw = parsed_payload.modality_metadata
+
+    artifact_name_clean = _clean_label(artifact_name, max_length=255)
+    description_clean = _clean_text(description)
+    if not description_clean or len(description_clean) < 10:
         raise bad_request_exception("Add a description of at least 10 characters.")
 
-    category_name = _clean_label(payload.category)
-    symptom_names = [
-        _clean_label(symptom_name)
-        for symptom_name in payload.symptoms
-        if _clean_text(symptom_name)
-    ]
-    symptom_names = [
-        symptom_name
-        for symptom_name in symptom_names
-        if symptom_name.casefold() != category_name.casefold()
-    ]
+    if isinstance(symptoms_raw, list):
+        symptom_names = [_clean_label(s) for s in symptoms_raw if _clean_text(s)]
+    else:
+        symptom_names = _parse_json_or_delimited_list(str(symptoms_raw) if symptoms_raw else None)
+
+    if category_name:
+        symptom_names = [s for s in symptom_names if s.casefold() != category_name.casefold()]
     deduped_symptoms: list[str] = []
     seen_symptoms: set[str] = set()
-    for symptom_name in symptom_names:
-        key = symptom_name.casefold()
-        if key not in seen_symptoms:
-            seen_symptoms.add(key)
-            deduped_symptoms.append(symptom_name)
+    for s in symptom_names:
+        k = s.casefold()
+        if k not in seen_symptoms:
+            seen_symptoms.add(k)
+            deduped_symptoms.append(s)
 
-    artifact.title = artifact_name
-    artifact.explanation = description
-    artifact.visual_description = description
-    artifact.default_modality = payload.modality
-    artifact.remedies = _remedies_from_text(payload.remedies)
+    parsed_modality_metadata = {}
+    if modality_metadata_raw:
+        if isinstance(modality_metadata_raw, dict):
+            parsed_modality_metadata = modality_metadata_raw
+        elif isinstance(modality_metadata_raw, str):
+            try:
+                parsed_modality_metadata = json.loads(modality_metadata_raw)
+            except Exception:
+                parsed_modality_metadata = {}
 
-    image.title = artifact_name
-    image.caption = description
-    image.modality = payload.modality
-    image.vendor = _clean_text(payload.scanner)
-    image.sequence = _clean_text(payload.sequence)
-    image.protocol = _clean_text(payload.protocol)
-    image.field_strength = _clean_text(payload.field_strength)
-    if payload.modality_metadata is not None:
-        image.modality_metadata = payload.modality_metadata
+    parsed_slice_metadata = []
+    if slice_metadata_raw:
+        if isinstance(slice_metadata_raw, list):
+            parsed_slice_metadata = slice_metadata_raw
+        elif isinstance(slice_metadata_raw, str):
+            try:
+                parsed_slice_metadata = json.loads(slice_metadata_raw)
+            except Exception:
+                parsed_slice_metadata = []
+
+    deleted_uuids: set[UUID] = set()
+    if deleted_file_ids_raw:
+        if isinstance(deleted_file_ids_raw, str):
+            try:
+                parsed_del = (
+                    json.loads(deleted_file_ids_raw)
+                    if deleted_file_ids_raw.strip().startswith("[")
+                    else deleted_file_ids_raw.split(",")
+                )
+            except Exception:
+                parsed_del = deleted_file_ids_raw.split(",")
+        elif isinstance(deleted_file_ids_raw, list):
+            parsed_del = deleted_file_ids_raw
+        else:
+            parsed_del = []
+
+        for item in parsed_del:
+            try:
+                deleted_uuids.add(UUID(str(item).strip()))
+            except (ValueError, TypeError):
+                pass
+
+    existing_files = list(image.files)
+    for f in existing_files:
+        if f.id in deleted_uuids:
+            delete_storage_file(f.storage_key, bucket=f.storage_bucket, storage_provider=f.storage_provider)
+            db.delete(f)
+
+    db.flush()
+    db.refresh(image)
+
+    is_public = image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
+    target_bucket = settings.APPROVED_STORAGE_BUCKET if is_public else settings.PRIVATE_STORAGE_BUCKET
+
+    montage_replacements = [
+        (axial_montage, FileRole.AXIAL_MONTAGE),
+        (coronal_montage, FileRole.CORONAL_MONTAGE),
+        (sagittal_montage, FileRole.SAGITTAL_MONTAGE),
+    ]
+    for m_upload, m_role in montage_replacements:
+        if m_upload and m_upload.filename:
+            for f in list(image.files):
+                if f.file_role == m_role:
+                    delete_storage_file(f.storage_key, bucket=f.storage_bucket, storage_provider=f.storage_provider)
+                    db.delete(f)
+            db.flush()
+
+            m_type = _file_type_for_filename(m_upload.filename)
+            storage_key, total_bytes, checksum, _saved_path = _store_upload(
+                m_upload,
+                submission.id,
+                target_bucket=target_bucket,
+                file_type=m_type,
+            )
+            public_url = (
+                _public_url_for_upload(request, storage_key, m_type, bucket=target_bucket)
+                if is_public
+                else None
+            )
+            m_file = ImageFile(
+                image=image,
+                file_role=m_role,
+                file_type=m_type,
+                storage_provider=_storage_provider(),
+                storage_bucket=target_bucket,
+                storage_key=storage_key,
+                public_url=public_url,
+                is_public=public_url is not None,
+                file_size_mb=round(total_bytes / (1024 * 1024), 3),
+                checksum=checksum,
+            )
+            db.add(m_file)
+            db.flush()
+
+    if upload_files:
+        for upload in upload_files:
+            if not upload.filename:
+                continue
+            file_type = _file_type_for_filename(upload.filename)
+            storage_key, total_bytes, checksum, _saved_path = _store_upload(
+                upload,
+                submission.id,
+                target_bucket=target_bucket,
+                file_type=file_type,
+            )
+            public_url = (
+                _public_url_for_upload(request, storage_key, file_type, bucket=target_bucket)
+                if is_public
+                else None
+            )
+            image_file = ImageFile(
+                image=image,
+                file_role=FileRole.REPRESENTATIVE,
+                file_type=file_type,
+                storage_provider=_storage_provider(),
+                storage_bucket=target_bucket,
+                storage_key=storage_key,
+                public_url=public_url,
+                is_public=public_url is not None,
+                file_size_mb=round(total_bytes / (1024 * 1024), 3),
+                checksum=checksum,
+            )
+            db.add(image_file)
+            db.flush()
+
+    db.refresh(image)
+
+    if len(image.files) == 0:
+        raise bad_request_exception("At least 1 image slice is required for an artifact.")
+
+    rep_files = [
+        f for f in image.files
+        if f.file_role in {FileRole.PRIMARY_REPRESENTATIVE, FileRole.REPRESENTATIVE}
+    ]
+
+    target_primary_uuid: UUID | None = None
+    if primary_file_id_str:
+        try:
+            target_primary_uuid = UUID(str(primary_file_id_str).strip())
+        except (ValueError, TypeError):
+            pass
+
+    if target_primary_uuid:
+        for f in rep_files:
+            if f.id == target_primary_uuid:
+                f.file_role = FileRole.PRIMARY_REPRESENTATIVE
+            else:
+                f.file_role = FileRole.REPRESENTATIVE
+    elif primary_slice_index is not None and 0 <= primary_slice_index < len(rep_files):
+        for idx, f in enumerate(rep_files):
+            f.file_role = (
+                FileRole.PRIMARY_REPRESENTATIVE if idx == primary_slice_index else FileRole.REPRESENTATIVE
+            )
+    else:
+        has_primary = any(f.file_role == FileRole.PRIMARY_REPRESENTATIVE for f in rep_files)
+        if not has_primary and rep_files:
+            rep_files[0].file_role = FileRole.PRIMARY_REPRESENTATIVE
+
+    artifact.title = artifact_name_clean
+    artifact.explanation = description_clean
+    artifact.visual_description = description_clean
+    artifact.default_modality = modality
+    artifact.remedies = _remedies_from_text(remedies_raw)
+
+    image.title = artifact_name_clean
+    image.caption = description_clean
+    image.modality = modality
+    image.vendor = scanner
+    image.sequence = sequence
+    image.protocol = protocol
+    image.field_strength = field_strength
+    if parsed_modality_metadata is not None:
+        image.modality_metadata = parsed_modality_metadata
 
     _replace_artifact_tags(
         db,
         artifact,
-        category_name,
+        category_name or "Other",
         deduped_symptoms,
-        payload.modality,
+        modality,
     )
     artifact_link = _artifact_link_for_image(image)
     if artifact_link:
         artifact_link.note = category_name
+
+    reference_lines = _parse_lines(references_raw)
     submission.submitter_notes = json.dumps(
         {
             "category": category_name,
             "symptoms": deduped_symptoms,
+            "references": reference_lines,
+            "submitter_notes": _clean_text(submitter_notes_raw),
             "modality_metadata": image.modality_metadata,
+            "slice_metadata": parsed_slice_metadata,
         },
         indent=2,
     )

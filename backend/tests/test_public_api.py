@@ -732,6 +732,39 @@ def test_update_my_submission_rejects_other_user():
     assert db.committed is False
 
 
+def test_update_my_submission_with_modality_metadata_and_notes():
+    user = make_user()
+    submission, artifact, image = make_manageable_submission(user)
+    db = FakeSubmissionManageSession(submission)
+
+    response = submissions.update_my_submission(
+        submission.id,
+        SubmissionUpdate(
+            artifact_name="ASL Transit Artifact",
+            modality=Modality.ASL,
+            description="Clear transit delay artifact with arterial pooling.",
+            scanner="Siemens Prisma",
+            sequence="3D GRASE",
+            protocol="pCASL_3D",
+            field_strength="3T",
+            symptoms=["transit delay", "macrovascular"],
+            remedies="Increase PLD from 1800ms to 2500ms.",
+            references="https://doi.org/10.1002/mrm.20001\nhttps://osipi.org",
+            submitter_notes="Patient had slow cerebral blood flow.",
+            modality_metadata={"pld": 2000, "labeling_duration": 1800, "labeling_scheme": "PCASL"},
+        ),
+        current_user=user,
+        db=db,
+    )
+
+    assert artifact.title == "ASL Transit Artifact"
+    assert image.modality_metadata == {"pld": 2000, "labeling_duration": 1800, "labeling_scheme": "PCASL"}
+    assert response.image.modality_metadata["pld"] == 2000
+    assert "https://doi.org/10.1002/mrm.20001" in submission.submitter_notes
+    assert "Patient had slow cerebral blood flow." in submission.submitter_notes
+    assert db.committed is True
+
+
 def test_withdraw_my_submission_archives_artifact_and_private_files():
     user = make_user()
     submission, artifact, image = make_manageable_submission(user)

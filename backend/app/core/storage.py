@@ -110,3 +110,29 @@ def get_public_url(
             return f"/uploads/{storage_key}"
 
     return None
+
+
+def delete_from_supabase(bucket: str, storage_keys: list[str]) -> None:
+    client = get_supabase_client()
+    if not client or not storage_keys:
+        return
+    try:
+        client.storage.from_(bucket).remove(storage_keys)
+    except Exception as exc:
+        logger.warning("Failed to delete files from Supabase storage: %s", exc)
+
+
+def delete_storage_file(
+    storage_key: str,
+    bucket: str | None = None,
+    storage_provider: StorageProvider = StorageProvider.SUPABASE_STORAGE,
+) -> None:
+    if storage_provider == StorageProvider.SUPABASE_STORAGE:
+        delete_from_supabase(bucket or settings.APPROVED_STORAGE_BUCKET, [storage_key])
+
+    try:
+        local_path = get_storage_root() / storage_key
+        local_path.unlink(missing_ok=True)
+    except Exception as exc:
+        logger.warning("Failed to delete local storage file %s: %s", storage_key, exc)
+

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.db.models.enums import ArtifactStatus, FileType, ImageVisibilityStatus, Modality, SubmissionStatus
+from app.db.models.enums import ArtifactStatus, FileRole, FileType, ImageVisibilityStatus, Modality, SubmissionStatus
 from app.schemas.common import from_attributes
 
 
@@ -38,6 +38,17 @@ class SubmittedArtifactRead(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class SubmittedFileRead(BaseModel):
+    id: UUID
+    filename: str | None = None
+    file_role: FileRole = FileRole.REPRESENTATIVE
+    file_type: FileType
+    file_size_mb: float | None = None
+    checksum: str | None = None
+    public_url: str | None = None
+    storage_key: str | None = None
+
+
 class SubmittedImageRead(BaseModel):
     id: UUID
     title: str | None = None
@@ -48,14 +59,7 @@ class SubmittedImageRead(BaseModel):
     field_strength: str | None = None
     visibility_status: ImageVisibilityStatus
     modality_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class SubmittedFileRead(BaseModel):
-    id: UUID
-    filename: str
-    file_type: FileType
-    file_size_mb: float | None = None
-    checksum: str | None = None
+    files: list[SubmittedFileRead] = Field(default_factory=list)
 
 
 class SubmissionReceiptRead(SubmissionRead):
@@ -68,6 +72,9 @@ class MySubmissionRead(BaseModel):
     id: UUID
     contact_email: str | None = None
     status: SubmissionStatus
+    permission_confirmed: bool = False
+    pseudonymisation_confirmed: bool = False
+    submitter_notes: str | None = None
     submitted_at: datetime | None = None
     reviewed_at: datetime | None = None
     created_at: datetime
@@ -80,7 +87,7 @@ class MySubmissionRead(BaseModel):
 class SubmissionUpdate(BaseModel):
     artifact_name: str
     modality: Modality
-    category: str
+    category: str | None = None
     description: str
     scanner: str | None = None
     sequence: str | None = None
@@ -88,4 +95,6 @@ class SubmissionUpdate(BaseModel):
     field_strength: str | None = None
     symptoms: list[str] = Field(default_factory=list)
     remedies: str | None = None
+    references: str | None = None
+    submitter_notes: str | None = None
     modality_metadata: dict[str, Any] | None = None
