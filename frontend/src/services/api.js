@@ -5,6 +5,9 @@ const getApiBaseUrl = () => {
     if (configured) {
         return configured.replace(/\/$/, "");
     }
+    if (typeof window !== "undefined") {
+        return "/api/v1";
+    }
     return "http://127.0.0.1:8000/api/v1";
 };
 

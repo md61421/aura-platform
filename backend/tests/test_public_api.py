@@ -488,6 +488,27 @@ def test_create_submission_can_save_private_draft(monkeypatch, tmp_path):
     assert db.committed is True
 
 
+def test_create_submission_without_category_validates_schema(monkeypatch, tmp_path):
+    db = FakeWriteSession()
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))
+
+    kwargs = valid_submission_kwargs(
+        db=db,
+        files=[make_upload("draft.png")],
+        save_as_draft=True,
+    )
+    kwargs["category"] = None
+    kwargs["symptoms"] = json.dumps(["motion", "banding"])
+
+    response = submissions.create_submission(**kwargs)
+
+    assert response["status"].value == "pending_review"
+    assert response["artifact"]["status"].value == "draft"
+    assert None not in response["artifact"]["tags"]
+    assert response["artifact"]["tags"] == ["motion", "banding"]
+    assert db.committed is True
+
+
 def test_create_submission_rejects_nifti_files(monkeypatch, tmp_path):
     db = FakeWriteSession()
     monkeypatch.setattr(settings, "LOCAL_STORAGE_ROOT", str(tmp_path))

@@ -1139,7 +1139,7 @@ def create_submission(
             "title": artifact.title,
             "default_modality": artifact.default_modality,
             "status": artifact.status,
-            "tags": [category_name, *symptom_names],
+            "tags": [t for t in ([category_name] if category_name else []) + symptom_names if t],
         },
         "image": {
             "id": image.id,
