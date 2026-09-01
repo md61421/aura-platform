@@ -889,3 +889,53 @@ def test_create_submission_validation_errors(form_updates, expected_detail):
     assert exc_info.value.status_code == 400
     assert expected_detail in exc_info.value.detail
     assert db.committed is False
+
+
+def test_update_my_submission_http_multipart_and_json():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.dependencies import get_db_session, require_contributor
+
+    user = make_user()
+    submission_multipart, _art1, _img1 = make_manageable_submission(user)
+    submission_json, _art2, _img2 = make_manageable_submission(user)
+
+    app.dependency_overrides[require_contributor] = lambda: user
+
+    try:
+        # Test multipart/form-data update
+        db_multi = FakeSubmissionManageSession(submission_multipart)
+        app.dependency_overrides[get_db_session] = lambda: db_multi
+        client = TestClient(app)
+
+        res_form = client.post(
+            f"/api/v1/submissions/{submission_multipart.id}/edit",
+            data={
+                "artifact_name": "Updated via Multipart",
+                "modality": "ASL",
+                "description": "Updated description with enough characters for validation.",
+                "scanner": "Siemens Prisma",
+            },
+        )
+        assert res_form.status_code == 200
+        assert res_form.json()["artifact"]["title"] == "Updated via Multipart"
+
+        # Test JSON update
+        db_json = FakeSubmissionManageSession(submission_json)
+        app.dependency_overrides[get_db_session] = lambda: db_json
+
+        res_json = client.post(
+            f"/api/v1/submissions/{submission_json.id}/edit",
+            json={
+                "artifact_name": "Updated via JSON",
+                "modality": "ASL",
+                "description": "Updated JSON description with enough characters for validation.",
+            },
+        )
+        assert res_json.status_code == 200
+        assert res_json.json()["artifact"]["title"] == "Updated via JSON"
+    finally:
+        app.dependency_overrides.pop(require_contributor, None)
+        app.dependency_overrides.pop(get_db_session, None)
+
+

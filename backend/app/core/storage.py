@@ -103,11 +103,13 @@ def get_public_url(
             base_url = settings.SUPABASE_URL.rstrip("/")
             return f"{base_url}/storage/v1/object/public/{target_bucket}/{storage_key}"
 
-    if storage_provider == StorageProvider.LOCAL_DEV and request:
-        try:
-            return str(request.url_for("local_upload", path=storage_key))
-        except Exception:
-            return f"/uploads/{storage_key}"
+    if storage_provider == StorageProvider.LOCAL_DEV:
+        if request:
+            try:
+                return str(request.url_for("local_upload", path=storage_key))
+            except Exception:
+                return f"/uploads/{storage_key}"
+        return f"/uploads/{storage_key}"
 
     return None
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import get_current_user_optional, get_db_session
 from app.core.exceptions import not_found_exception
+from app.core.storage import get_public_url as get_storage_public_url
 from app.core.workflow import PUBLIC_ARTIFACT_STATUSES
 from app.db.models import Artifact, ArtifactTag, Image, ImageArtifact, Submission, Tag, User, Vote
 from app.db.models.enums import ArtifactStatus, ImageArtifactRelationshipType, ImageVisibilityStatus, Modality, VoteType
@@ -85,10 +86,21 @@ def _public_image_summaries(artifact: Artifact) -> list[PublicImageSummaryRead]:
                     id=image_file.id,
                     file_role=image_file.file_role.value,
                     file_type=image_file.file_type.value,
-                    public_url=image_file.public_url,
+                    public_url=(
+                        image_file.public_url
+                        or (
+                            get_storage_public_url(
+                                storage_key=image_file.storage_key,
+                                bucket=image_file.storage_bucket,
+                                storage_provider=image_file.storage_provider,
+                            )
+                            if image_file.storage_key
+                            else None
+                        )
+                    ),
                 )
                 for image_file in image.files
-                if image_file.is_public and image_file.public_url
+                if image_file.is_public and (image_file.public_url or image_file.storage_key)
             ],
             key=lambda f: role_priority.get(f.file_role, 99),
         )

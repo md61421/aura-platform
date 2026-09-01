@@ -3,7 +3,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -475,7 +475,7 @@ def list_my_submissions(
 @router.patch("/{submission_id}", response_model=MySubmissionRead)
 def update_my_submission(
     submission_id: UUID,
-    payload: SubmissionUpdate | None = None,
+    payload: Any = None,
     current_user: Annotated[User, Depends(require_contributor)] = None,
     db: Session = Depends(get_db_session),
     request: Request = None,
@@ -514,7 +514,7 @@ def update_my_submission(
     coronal_montage: UploadFile | None = None
     sagittal_montage: UploadFile | None = None
 
-    if payload is not None:
+    if isinstance(payload, SubmissionUpdate):
         artifact_name = payload.artifact_name
         modality = payload.modality
         category_name = _clean_label(payload.category) if payload.category else None
@@ -528,7 +528,24 @@ def update_my_submission(
         references_raw = payload.references
         submitter_notes_raw = payload.submitter_notes
         modality_metadata_raw = payload.modality_metadata
-    elif request is not None and "multipart/form-data" in content_type:
+    elif isinstance(payload, dict):
+        parsed_payload = SubmissionUpdate.model_validate(payload)
+        artifact_name = parsed_payload.artifact_name
+        modality = parsed_payload.modality
+        category_name = _clean_label(parsed_payload.category) if parsed_payload.category else None
+        description = parsed_payload.description
+        scanner = _clean_text(parsed_payload.scanner)
+        sequence = _clean_text(parsed_payload.sequence)
+        protocol = _clean_text(parsed_payload.protocol)
+        field_strength = _clean_text(parsed_payload.field_strength)
+        symptoms_raw = parsed_payload.symptoms
+        remedies_raw = parsed_payload.remedies
+        references_raw = parsed_payload.references
+        submitter_notes_raw = parsed_payload.submitter_notes
+        modality_metadata_raw = parsed_payload.modality_metadata
+    elif request is not None and (
+        "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type
+    ):
         import anyio
 
         form = anyio.from_thread.run(request.form)
@@ -564,34 +581,76 @@ def update_my_submission(
             except (ValueError, TypeError):
                 primary_slice_index = None
 
-        upload_files = [f for f in form.getlist("files") if isinstance(f, UploadFile) and f.filename]
+        upload_files = [f for f in form.getlist("files") if hasattr(f, "filename") and bool(f.filename)]
         ax = form.get("axial_montage")
-        if isinstance(ax, UploadFile) and ax.filename:
+        if hasattr(ax, "filename") and bool(ax.filename):
             axial_montage = ax
         cor = form.get("coronal_montage")
-        if isinstance(cor, UploadFile) and cor.filename:
+        if hasattr(cor, "filename") and bool(cor.filename):
             coronal_montage = cor
         sag = form.get("sagittal_montage")
-        if isinstance(sag, UploadFile) and sag.filename:
+        if hasattr(sag, "filename") and bool(sag.filename):
             sagittal_montage = sag
     elif request is not None:
         import anyio
 
-        body = anyio.from_thread.run(request.json)
-        parsed_payload = SubmissionUpdate.model_validate(body)
-        artifact_name = parsed_payload.artifact_name
-        modality = parsed_payload.modality
-        category_name = _clean_label(parsed_payload.category) if parsed_payload.category else None
-        description = parsed_payload.description
-        scanner = _clean_text(parsed_payload.scanner)
-        sequence = _clean_text(parsed_payload.sequence)
-        protocol = _clean_text(parsed_payload.protocol)
-        field_strength = _clean_text(parsed_payload.field_strength)
-        symptoms_raw = parsed_payload.symptoms
-        remedies_raw = parsed_payload.remedies
-        references_raw = parsed_payload.references
-        submitter_notes_raw = parsed_payload.submitter_notes
-        modality_metadata_raw = parsed_payload.modality_metadata
+        try:
+            body = anyio.from_thread.run(request.json)
+            parsed_payload = SubmissionUpdate.model_validate(body)
+            artifact_name = parsed_payload.artifact_name
+            modality = parsed_payload.modality
+            category_name = _clean_label(parsed_payload.category) if parsed_payload.category else None
+            description = parsed_payload.description
+            scanner = _clean_text(parsed_payload.scanner)
+            sequence = _clean_text(parsed_payload.sequence)
+            protocol = _clean_text(parsed_payload.protocol)
+            field_strength = _clean_text(parsed_payload.field_strength)
+            symptoms_raw = parsed_payload.symptoms
+            remedies_raw = parsed_payload.remedies
+            references_raw = parsed_payload.references
+            submitter_notes_raw = parsed_payload.submitter_notes
+            modality_metadata_raw = parsed_payload.modality_metadata
+        except Exception:
+            form = anyio.from_thread.run(request.form)
+            artifact_name = str(form.get("artifact_name") or form.get("artifactName") or "")
+            modality_str = str(form.get("modality") or "UNKNOWN")
+            try:
+                modality = Modality(modality_str)
+            except ValueError:
+                modality = Modality.UNKNOWN
+            category_name = _clean_label(str(form.get("category") or "")) if form.get("category") else None
+            description = str(form.get("description") or "")
+            scanner = _clean_text(str(form.get("scanner") or "")) if form.get("scanner") else None
+            sequence = _clean_text(str(form.get("sequence") or "")) if form.get("sequence") else None
+            protocol = _clean_text(str(form.get("protocol") or "")) if form.get("protocol") else None
+            field_strength = (
+                _clean_text(str(form.get("field_strength") or form.get("fieldStrength") or ""))
+                if (form.get("field_strength") or form.get("fieldStrength"))
+                else None
+            )
+            symptoms_raw = form.get("symptoms")
+            remedies_raw = form.get("remedies")
+            references_raw = form.get("references")
+            submitter_notes_raw = form.get("submitter_notes") or form.get("submitterNotes")
+            modality_metadata_raw = form.get("modality_metadata") or form.get("modalityMetadata")
+            slice_metadata_raw = form.get("slice_metadata") or form.get("sliceMetadata")
+            deleted_file_ids_raw = form.get("deleted_file_ids") or form.get("deletedFileIds")
+            primary_file_id_str = form.get("primary_file_id") or form.get("primaryFileId")
+            if form.get("primary_slice_index") is not None:
+                try:
+                    primary_slice_index = int(form.get("primary_slice_index"))
+                except (ValueError, TypeError):
+                    primary_slice_index = None
+            upload_files = [f for f in form.getlist("files") if hasattr(f, "filename") and bool(f.filename)]
+            ax = form.get("axial_montage")
+            if hasattr(ax, "filename") and bool(ax.filename):
+                axial_montage = ax
+            cor = form.get("coronal_montage")
+            if hasattr(cor, "filename") and bool(cor.filename):
+                coronal_montage = cor
+            sag = form.get("sagittal_montage")
+            if hasattr(sag, "filename") and bool(sag.filename):
+                sagittal_montage = sag
 
     artifact_name_clean = _clean_label(artifact_name, max_length=255)
     description_clean = _clean_text(description)
@@ -664,7 +723,14 @@ def update_my_submission(
     db.flush()
     db.refresh(image)
 
-    is_public = image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
+    is_public = (
+        image.visibility_status == ImageVisibilityStatus.APPROVED_PUBLIC
+        or artifact.status in {ArtifactStatus.CONTRIBUTOR_PUBLISHED, ArtifactStatus.OSIPI_VERIFIED, ArtifactStatus.APPROVED}
+        or settings.DEV_AUTO_APPROVE_SUBMISSIONS
+    )
+    if is_public:
+        image.visibility_status = ImageVisibilityStatus.APPROVED_PUBLIC
+
     target_bucket = settings.APPROVED_STORAGE_BUCKET if is_public else settings.PRIVATE_STORAGE_BUCKET
 
     montage_replacements = [
@@ -700,7 +766,7 @@ def update_my_submission(
                 storage_bucket=target_bucket,
                 storage_key=storage_key,
                 public_url=public_url,
-                is_public=public_url is not None,
+                is_public=is_public and public_url is not None,
                 file_size_mb=round(total_bytes / (1024 * 1024), 3),
                 checksum=checksum,
             )
@@ -731,7 +797,7 @@ def update_my_submission(
                 storage_bucket=target_bucket,
                 storage_key=storage_key,
                 public_url=public_url,
-                is_public=public_url is not None,
+                is_public=is_public and public_url is not None,
                 file_size_mb=round(total_bytes / (1024 * 1024), 3),
                 checksum=checksum,
             )
@@ -739,6 +805,12 @@ def update_my_submission(
             db.flush()
 
     db.refresh(image)
+
+    if is_public:
+        for f in image.files:
+            f.is_public = True
+            if not f.public_url and f.storage_key:
+                f.public_url = _public_url_for_upload(request, f.storage_key, f.file_type, bucket=target_bucket)
 
     if len(image.files) == 0:
         raise bad_request_exception("At least 1 image slice is required for an artifact.")

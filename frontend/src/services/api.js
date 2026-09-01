@@ -98,7 +98,7 @@ const sortFilesForDisplay = (files = []) =>
         return (rank[aKey] ?? 99) - (rank[bKey] ?? 99);
     });
 
-const isDisplayImageFile = (file) => ["jpg", "png"].includes(file.file_type);
+const isDisplayImageFile = (file) => ["jpg", "jpeg", "png"].includes((file.file_type || "").toLowerCase());
 
 const isNiftiFile = (file) => ["nifti", "nii_gz"].includes(file.file_type);
 
