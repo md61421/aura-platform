@@ -152,6 +152,22 @@ const parseSubmitterNotes = (raw) => {
   }
 };
 
+const formatFileSize = (bytes) => {
+  if (!bytes || isNaN(bytes)) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + (sizes[i] || "B");
+};
+
+const formatSliceSize = (slice) => {
+  if (slice.file?.size) return formatFileSize(slice.file.size);
+  if (slice.file_size_mb !== undefined && slice.file_size_mb !== null && slice.file_size_mb > 0) {
+    return `${slice.file_size_mb} MB`;
+  }
+  return "Image slice";
+};
+
 const submissionToEditForm = (submission) => {
   const parsed = parseSubmitterNotes(submission.submitter_notes);
   const tags = Array.isArray(submission.artifact?.tags) ? submission.artifact.tags : [];
@@ -163,15 +179,55 @@ const submissionToEditForm = (submission) => {
       f.file_role === "primary_representative" ||
       f.file_role === "representative" ||
       !f.file_role ||
-      f.file_role === "thumbnail",
+      f.file_role === "thumbnail" ||
+      f.file_role === "other",
   );
-
-  const primaryFile =
-    repFiles.find((f) => f.file_role === "primary_representative") || repFiles[0];
 
   const axialMontage = existingFiles.find((f) => f.file_role === "axial_montage");
   const coronalMontage = existingFiles.find((f) => f.file_role === "coronal_montage");
   const sagittalMontage = existingFiles.find((f) => f.file_role === "sagittal_montage");
+
+  const sliceMetaList = parsed.sliceMetadata || [];
+  const hasSavedMeta = Array.isArray(sliceMetaList) && sliceMetaList.length > 0;
+
+  const mappedExistingSlices = repFiles.map((f, index) => {
+    const urlFilename = String(f.public_url ? f.public_url.split("/").pop() : "").split("?")[0].toLowerCase();
+    const sliceMeta = sliceMetaList.find((sm) => {
+      if (!sm) return false;
+      if (sm.id && f.id && String(sm.id) === String(f.id)) return true;
+      if (sm.public_url && f.public_url && sm.public_url === f.public_url) return true;
+      if (sm.filename) {
+        const metaName = String(sm.filename).toLowerCase();
+        if (f.filename && String(f.filename).toLowerCase() === metaName) return true;
+        if (urlFilename && (urlFilename.endsWith(metaName) || metaName.endsWith(urlFilename) || urlFilename.includes(metaName))) return true;
+      }
+      return false;
+    }) || (sliceMetaList[index] && !sliceMetaList[index].id ? sliceMetaList[index] : null);
+
+    const isKey = hasSavedMeta
+      ? Boolean(sliceMeta?.isKey || sliceMeta?.is_key || sliceMeta?.isPriority || sliceMeta?.is_priority || sliceMeta?.is_key_slice)
+      : f.file_role === "primary_representative";
+
+    const plane = (sliceMeta?.plane || sliceMeta?.view || "axial").toLowerCase();
+    const sortIndex = sliceMeta?.index !== undefined ? Number(sliceMeta.index) : index;
+
+    return {
+      file_role: f.file_role,
+      file_size_mb: f.file_size_mb,
+      filename: sliceMeta?.filename || f.filename || `slice_${index + 1}.png`,
+      id: f.id,
+      isExisting: true,
+      isKey,
+      plane: ["axial", "coronal", "sagittal"].includes(plane) ? plane : "axial",
+      previewUrl: f.public_url,
+      public_url: f.public_url,
+      sortIndex,
+    };
+  });
+
+  mappedExistingSlices.sort((a, b) => a.sortIndex - b.sortIndex);
+
+  const primaryFile = mappedExistingSlices.find((s) => s.isKey) || mappedExistingSlices[0] || null;
 
   return {
     artifactName: submission.artifact?.title || submission.image?.title || "",
@@ -186,19 +242,7 @@ const submissionToEditForm = (submission) => {
     existingAxialMontage: axialMontage || null,
     existingCoronalMontage: coronalMontage || null,
     existingSagittalMontage: sagittalMontage || null,
-    existingSlices: repFiles.map((f, index) => {
-      const sliceMeta =
-        parsed.sliceMetadata.find((sm) => sm.index === index || sm.filename === f.filename) || {};
-      return {
-        file_role: f.file_role,
-        file_size_mb: f.file_size_mb,
-        filename: f.filename || `slice_${index + 1}.png`,
-        id: f.id,
-        isKey: f.id === primaryFile?.id,
-        plane: sliceMeta.plane || "axial",
-        public_url: f.public_url,
-      };
-    }),
+    existingSlices: mappedExistingSlices,
     fieldStrength: submission.image?.field_strength || "",
     modality: submission.artifact?.default_modality || submission.image?.modality || "ASL",
     modalityMetadata: {
@@ -287,13 +331,18 @@ const Profile = () => {
   const [editSubmission, setEditSubmission] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [editTab, setEditTab] = useState("details");
+  const [activeViewTab, setActiveViewTab] = useState("axial");
+  const [uploadTargetView, setUploadTargetView] = useState("axial");
+  const [previewSliceId, setPreviewSliceId] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [draggedSliceId, setDraggedSliceId] = useState(null);
+  const [dragOverSliceId, setDragOverSliceId] = useState(null);
   const [tagInput, setTagInput] = useState("");
   const [modalitySchemaFields, setModalitySchemaFields] = useState([]);
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [existingArtifacts, setExistingArtifacts] = useState([]);
   const [showScannerSuggestions, setShowScannerSuggestions] = useState(false);
   const [showSequenceSuggestions, setShowSequenceSuggestions] = useState(false);
-  const [newSlicePlane, setNewSlicePlane] = useState("axial");
   const [withdrawSubmission, setWithdrawSubmission] = useState(null);
   const [republishSubmission, setRepublishSubmission] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -469,6 +518,12 @@ const Profile = () => {
     setEditSubmission(submission);
     setEditForm(submissionToEditForm(submission));
     setEditTab("details");
+    setActiveViewTab("axial");
+    setUploadTargetView("axial");
+    setPreviewSliceId(null);
+    setDraggedSliceId(null);
+    setDragOverSliceId(null);
+    setDragActive(false);
     setTagInput("");
   };
 
@@ -476,10 +531,48 @@ const Profile = () => {
     if (isActionBusy) {
       return;
     }
+    if (editForm?.newSlices) {
+      editForm.newSlices.forEach((s) => {
+        if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+      });
+    }
     setEditSubmission(null);
     setEditForm(null);
+    setPreviewSliceId(null);
     setActionError("");
   };
+
+  const allSlices = useMemo(() => {
+    if (!editForm) return [];
+    return [...(editForm.existingSlices || []), ...(editForm.newSlices || [])];
+  }, [editForm]);
+
+  const activeViewSlices = useMemo(() => {
+    return allSlices.filter((s) => (s.plane || "axial").toLowerCase() === activeViewTab);
+  }, [allSlices, activeViewTab]);
+
+  const modalSlice = useMemo(() => {
+    if (!previewSliceId) return null;
+    return allSlices.find((s) => s.id === previewSliceId) || null;
+  }, [allSlices, previewSliceId]);
+
+  const sameViewModalSlices = useMemo(() => {
+    if (!modalSlice) return [];
+    return allSlices.filter(
+      (s) => (s.plane || "axial").toLowerCase() === (modalSlice.plane || "axial").toLowerCase()
+    );
+  }, [allSlices, modalSlice]);
+
+  const modalSliceIndex = useMemo(() => {
+    if (!modalSlice) return -1;
+    return sameViewModalSlices.findIndex((s) => s.id === modalSlice.id);
+  }, [modalSlice, sameViewModalSlices]);
+
+  const prevModalSlice = modalSliceIndex > 0 ? sameViewModalSlices[modalSliceIndex - 1] : null;
+  const nextModalSlice =
+    modalSliceIndex >= 0 && modalSliceIndex < sameViewModalSlices.length - 1
+      ? sameViewModalSlices[modalSliceIndex + 1]
+      : null;
 
   const updateEditField = (event) => {
     const { name, value } = event.target;
@@ -520,102 +613,23 @@ const Profile = () => {
     }));
   };
 
-  const handleToggleExistingKeySlice = (fileId) => {
-    setEditForm((current) => {
-      const updatedExisting = current.existingSlices.map((s) => ({
-        ...s,
-        isKey: s.id === fileId,
-      }));
-      const updatedNew = current.newSlices.map((s) => ({
-        ...s,
-        isKey: false,
-      }));
-      return {
-        ...current,
-        existingSlices: updatedExisting,
-        newSlices: updatedNew,
-        primaryFileId: fileId,
-      };
-    });
-  };
+  const addFiles = (fileList, targetView = uploadTargetView) => {
+    const files = Array.from(fileList || []).filter(isSupportedUpload);
+    if (files.length === 0) return;
 
-  const handleToggleNewKeySlice = (sliceId) => {
-    setEditForm((current) => {
-      const updatedExisting = current.existingSlices.map((s) => ({
-        ...s,
-        isKey: false,
-      }));
-      const updatedNew = current.newSlices.map((s) => ({
-        ...s,
-        isKey: s.id === sliceId,
-      }));
-      return {
-        ...current,
-        existingSlices: updatedExisting,
-        newSlices: updatedNew,
-        primaryFileId: null,
-      };
-    });
-  };
-
-  const handleDeleteExistingSlice = (fileId) => {
-    setEditForm((current) => {
-      const updatedExisting = current.existingSlices.filter((s) => s.id !== fileId);
-      const isDeletedKey = current.primaryFileId === fileId;
-
-      let nextPrimaryFileId = current.primaryFileId;
-      if (isDeletedKey) {
-        if (updatedExisting.length > 0) {
-          updatedExisting[0].isKey = true;
-          nextPrimaryFileId = updatedExisting[0].id;
-        } else if (current.newSlices.length > 0) {
-          current.newSlices[0].isKey = true;
-          nextPrimaryFileId = null;
-        }
-      }
-
-      return {
-        ...current,
-        deletedFileIds: [...current.deletedFileIds, fileId],
-        existingSlices: updatedExisting,
-        primaryFileId: nextPrimaryFileId,
-      };
-    });
-  };
-
-  const handleDeleteNewSlice = (sliceId) => {
-    setEditForm((current) => {
-      const updatedNew = current.newSlices.filter((s) => s.id !== sliceId);
-      return {
-        ...current,
-        newSlices: updatedNew,
-      };
-    });
-  };
-
-  const handleFileUpload = (event) => {
-    const files = Array.from(event.target.files || []);
-    const validFiles = files.filter(isSupportedUpload);
-
-    if (validFiles.length === 0) {
-      return;
-    }
-
-    const newSliceObjects = validFiles.map((file, idx) => ({
+    const newSliceObjects = files.map((file, idx) => ({
+      id: `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+      isExisting: false,
       file,
       filename: file.name,
-      id: `new_${Date.now()}_${idx}`,
+      file_size_mb: parseFloat((file.size / (1024 * 1024)).toFixed(2)),
+      plane: targetView || "axial",
       isKey: false,
-      plane: newSlicePlane,
       previewUrl: URL.createObjectURL(file),
     }));
 
     setEditForm((current) => {
-      const hasAnyKey =
-        current.existingSlices.some((s) => s.isKey) || current.newSlices.some((s) => s.isKey);
-      if (!hasAnyKey && newSliceObjects.length > 0) {
-        newSliceObjects[0].isKey = true;
-      }
+      if (!current) return current;
       return {
         ...current,
         newSlices: [...current.newSlices, ...newSliceObjects],
@@ -625,6 +639,146 @@ const Profile = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const updateSliceView = (sliceId, newView) => {
+    const normalized = (newView || "axial").toLowerCase();
+    setEditForm((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        existingSlices: current.existingSlices.map((s) =>
+          s.id === sliceId ? { ...s, plane: normalized } : s
+        ),
+        newSlices: current.newSlices.map((s) =>
+          s.id === sliceId ? { ...s, plane: normalized } : s
+        ),
+      };
+    });
+  };
+
+  const toggleSliceKey = (sliceId) => {
+    setEditForm((current) => {
+      if (!current) return current;
+
+      const updatedExisting = current.existingSlices.map((s) =>
+        s.id === sliceId ? { ...s, isKey: !s.isKey } : s
+      );
+      const updatedNew = current.newSlices.map((s) =>
+        s.id === sliceId ? { ...s, isKey: !s.isKey } : s
+      );
+
+      const firstExistingKey = updatedExisting.find((s) => s.isKey);
+
+      return {
+        ...current,
+        existingSlices: updatedExisting,
+        newSlices: updatedNew,
+        primaryFileId: firstExistingKey ? firstExistingKey.id : null,
+      };
+    });
+  };
+
+  const removeSlice = (sliceId) => {
+    if (previewSliceId === sliceId) {
+      setPreviewSliceId(null);
+    }
+    setEditForm((current) => {
+      if (!current) return current;
+      const isExisting = current.existingSlices.some((s) => s.id === sliceId);
+      let updatedExisting = current.existingSlices;
+      let updatedNew = current.newSlices;
+      let deletedIds = current.deletedFileIds || [];
+
+      if (isExisting) {
+        updatedExisting = current.existingSlices.filter((s) => s.id !== sliceId);
+        deletedIds = [...deletedIds, sliceId];
+      } else {
+        const toDelete = current.newSlices.find((s) => s.id === sliceId);
+        if (toDelete?.previewUrl) URL.revokeObjectURL(toDelete.previewUrl);
+        updatedNew = current.newSlices.filter((s) => s.id !== sliceId);
+      }
+
+      const firstRemainingKey = updatedExisting.find((s) => s.isKey);
+      const nextPrimaryId = firstRemainingKey ? firstRemainingKey.id : null;
+
+      return {
+        ...current,
+        deletedFileIds: deletedIds,
+        existingSlices: updatedExisting,
+        newSlices: updatedNew,
+        primaryFileId: nextPrimaryId,
+      };
+    });
+  };
+
+  const moveSlice = (sliceId, direction) => {
+    const viewList = [...activeViewSlices];
+    const idx = viewList.findIndex((s) => s.id === sliceId);
+    if (idx === -1) return;
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= viewList.length) return;
+
+    const sourceSlice = viewList[idx];
+    const targetSlice = viewList[targetIdx];
+
+    setEditForm((current) => {
+      if (!current) return current;
+
+      const inExist1 = current.existingSlices.findIndex((s) => s.id === sourceSlice.id);
+      const inExist2 = current.existingSlices.findIndex((s) => s.id === targetSlice.id);
+      if (inExist1 !== -1 && inExist2 !== -1) {
+        const next = [...current.existingSlices];
+        const temp = next[inExist1];
+        next[inExist1] = next[inExist2];
+        next[inExist2] = temp;
+        return { ...current, existingSlices: next };
+      }
+
+      const inNew1 = current.newSlices.findIndex((s) => s.id === sourceSlice.id);
+      const inNew2 = current.newSlices.findIndex((s) => s.id === targetSlice.id);
+      if (inNew1 !== -1 && inNew2 !== -1) {
+        const next = [...current.newSlices];
+        const temp = next[inNew1];
+        next[inNew1] = next[inNew2];
+        next[inNew2] = temp;
+        return { ...current, newSlices: next };
+      }
+
+      return current;
+    });
+  };
+
+  const handleSliceDrop = (targetSliceId) => {
+    if (!draggedSliceId || draggedSliceId === targetSliceId) return;
+
+    setEditForm((current) => {
+      if (!current) return current;
+
+      const inExist1 = current.existingSlices.findIndex((s) => s.id === draggedSliceId);
+      const inExist2 = current.existingSlices.findIndex((s) => s.id === targetSliceId);
+      if (inExist1 !== -1 && inExist2 !== -1) {
+        const next = [...current.existingSlices];
+        const [moved] = next.splice(inExist1, 1);
+        next.splice(inExist2, 0, moved);
+        return { ...current, existingSlices: next };
+      }
+
+      const inNew1 = current.newSlices.findIndex((s) => s.id === draggedSliceId);
+      const inNew2 = current.newSlices.findIndex((s) => s.id === targetSliceId);
+      if (inNew1 !== -1 && inNew2 !== -1) {
+        const next = [...current.newSlices];
+        const [moved] = next.splice(inNew1, 1);
+        next.splice(inNew2, 0, moved);
+        return { ...current, newSlices: next };
+      }
+
+      return current;
+    });
+  };
+
+  const handleFileUpload = (event) => {
+    addFiles(event.target.files, uploadTargetView);
   };
 
   const replaceSubmission = (nextSubmission) => {
@@ -705,16 +859,18 @@ const Profile = () => {
 
       const allSliceMetadata = [
         ...editForm.existingSlices.map((s, idx) => ({
+          id: s.id,
           filename: s.filename,
           index: idx,
-          isKey: s.isKey,
-          plane: s.plane || "axial",
+          isKey: Boolean(s.isKey),
+          plane: (s.plane || "axial").toLowerCase(),
+          public_url: s.public_url || null,
         })),
         ...editForm.newSlices.map((s, idx) => ({
           filename: s.filename,
           index: editForm.existingSlices.length + idx,
-          isKey: s.isKey,
-          plane: s.plane || "axial",
+          isKey: Boolean(s.isKey),
+          plane: (s.plane || "axial").toLowerCase(),
         })),
       ];
       formData.append("slice_metadata", JSON.stringify(allSliceMetadata));
@@ -981,7 +1137,7 @@ const Profile = () => {
       {editSubmission && editForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-3 sm:p-5 backdrop-blur-xs">
           <form
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl animate-fade-in"
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl animate-fade-in"
             onSubmit={submitEdit}
           >
             {/* Modal Header */}
@@ -1408,308 +1564,448 @@ const Profile = () => {
               {/* SECTION 3: SLICES & MONTAGES */}
               {editTab === "media" && (
                 <div className="space-y-6">
-                  {/* Current Slices Gallery */}
-                  <div>
-                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  {/* Combined Slice Upload, Drag & Drop, and Preview Canvas */}
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <label className="block text-sm font-bold text-gray-900 flex items-center gap-2">
-                          <i className="fas fa-images text-brand-500"></i> Artifact Image Slices <span className="text-xs font-normal text-red-600">(Required - at least 1)</span>
+                          <i className="fas fa-images text-brand-500"></i> Artifact Image Slices{" "}
+                          <span className="text-xs font-normal text-red-600">(Required - at least 1)</span>
                         </label>
                         <p className="text-xs text-gray-500 mt-0.5">
                           Upload slice captures by view and tag key diagnostic slices.
                         </p>
                       </div>
-                    </div>
 
-                    {editForm.existingSlices.length === 0 && editForm.newSlices.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-red-200 bg-red-50 p-4 text-center text-xs font-semibold text-red-600">
-                        No slices attached. Upload at least 1 image slice below.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {/* Existing Slices */}
-                        {editForm.existingSlices.map((slice, idx) => (
-                          <div
-                            className={`relative rounded-xl border p-2 flex flex-col justify-between transition-all ${
-                              slice.isKey
-                                ? "border-brand-500 bg-brand-50/30 ring-2 ring-brand-500/20"
-                                : "border-gray-200 bg-white"
-                            }`}
-                            key={slice.id}
-                          >
-                            <div className="relative aspect-square w-full rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center">
-                              {slice.public_url ? (
-                                <img
-                                  alt={`Slice ${idx + 1}`}
-                                  className="h-full w-full object-contain"
-                                  src={slice.public_url}
-                                />
-                              ) : (
-                                <i className="fas fa-image text-gray-400 text-xl"></i>
-                              )}
-                              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white uppercase">
-                                {slice.plane || "axial"}
+                      {/* View Target Selector Tabs */}
+                      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200">
+                        {["axial", "coronal", "sagittal"].map((view) => {
+                          const count = allSlices.filter(
+                            (s) => (s.plane || "axial").toLowerCase() === view
+                          ).length;
+                          const isActive = activeViewTab === view;
+                          return (
+                            <button
+                              key={view}
+                              type="button"
+                              onClick={() => {
+                                setActiveViewTab(view);
+                                setUploadTargetView(view);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                                isActive
+                                  ? "bg-brand-600 text-white shadow-xs font-bold"
+                                  : "text-gray-700 hover:text-gray-900 hover:bg-gray-200/70"
+                              }`}
+                            >
+                              <span className="capitalize">{view}</span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                  isActive ? "bg-brand-800 text-white" : "bg-gray-200 text-gray-700"
+                                }`}
+                              >
+                                {count}
                               </span>
-                              {slice.isKey && (
-                                <span className="absolute top-1 left-1 rounded bg-brand-600 px-1 text-[9px] font-bold text-white">
-                                  Key
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-between px-1">
-                              <span className="text-[11px] font-medium text-gray-700 truncate max-w-[70px]">
-                                #{idx + 1}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {!slice.isKey && (
-                                  <button
-                                    className="p-1 text-gray-400 hover:text-brand-600"
-                                    onClick={() => handleToggleExistingKeySlice(slice.id)}
-                                    title="Set as Key Slice"
-                                    type="button"
-                                  >
-                                    <i className="far fa-star text-xs"></i>
-                                  </button>
-                                )}
-                                <button
-                                  className="p-1 text-gray-400 hover:text-red-600"
-                                  onClick={() => handleDeleteExistingSlice(slice.id)}
-                                  title="Delete slice"
-                                  type="button"
-                                >
-                                  <i className="fas fa-trash text-xs"></i>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-
-                        {/* Newly Uploaded Slices */}
-                        {editForm.newSlices.map((slice, idx) => (
-                          <div
-                            className={`relative rounded-xl border p-2 flex flex-col justify-between transition-all ${
-                              slice.isKey
-                                ? "border-brand-500 bg-brand-50/30 ring-2 ring-brand-500/20"
-                                : "border-emerald-300 bg-emerald-50/20"
-                            }`}
-                            key={slice.id}
-                          >
-                            <div className="relative aspect-square w-full rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center">
-                              <img
-                                alt={`New slice ${idx + 1}`}
-                                className="h-full w-full object-contain"
-                                src={slice.previewUrl}
-                              />
-                              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white uppercase">
-                                {slice.plane || "axial"}
-                              </span>
-                              <span className="absolute top-1 right-1 rounded bg-emerald-600 px-1 text-[9px] font-bold text-white">
-                                New
-                              </span>
-                            </div>
-
-                            <div className="mt-2 flex items-center justify-between px-1">
-                              <span className="text-[11px] font-medium text-gray-700 truncate max-w-[70px]" title={slice.filename}>
-                                {slice.filename}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {!slice.isKey && (
-                                  <button
-                                    className="p-1 text-gray-400 hover:text-brand-600"
-                                    onClick={() => handleToggleNewKeySlice(slice.id)}
-                                    title="Set as Key Slice"
-                                    type="button"
-                                  >
-                                    <i className="far fa-star text-xs"></i>
-                                  </button>
-                                )}
-                                <button
-                                  className="p-1 text-gray-400 hover:text-red-600"
-                                  onClick={() => handleDeleteNewSlice(slice.id)}
-                                  title="Remove new slice"
-                                  type="button"
-                                >
-                                  <i className="fas fa-times text-xs"></i>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Slices Dropzone */}
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-gray-700">Add Slices (PNG, JPG)</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-gray-500">MRI View:</span>
-                        <select
-                          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 font-medium"
-                          onChange={(e) => setNewSlicePlane(e.target.value)}
-                          value={newSlicePlane}
-                        >
-                          <option value="axial">Axial</option>
-                          <option value="coronal">Coronal</option>
-                          <option value="sagittal">Sagittal</option>
-                        </select>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
+                    {/* Main Combined Canvas Dropzone & Cards Grid */}
                     <div
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-white p-6 hover:border-brand-400 hover:bg-brand-50/10 cursor-pointer transition-colors"
-                      onClick={() => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-2xl p-4 sm:p-6 transition-all relative ${
+                        dragActive
+                          ? "border-brand-500 bg-brand-50/60 ring-4 ring-brand-500/10"
+                          : "border-gray-300 bg-gray-50/40"
+                      }`}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        if (!draggedSliceId) setDragActive(true);
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                          setDragActive(false);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragActive(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          addFiles(e.dataTransfer.files, uploadTargetView);
+                        }
+                      }}
                     >
+                      {allSlices.length === 0 ? (
+                        /* Big Empty Dropzone State */
+                        <div
+                          className="py-12 text-center cursor-pointer group"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <div className="mx-auto w-16 h-16 bg-brand-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <i className="fas fa-cloud-upload-alt text-3xl text-brand-500"></i>
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-800">
+                            Upload {uploadTargetView.toUpperCase()} Artifact Slices
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Drag and drop slice series here, or{" "}
+                            <span className="text-brand-600 font-semibold underline">browse local files</span>
+                          </p>
+                          <p className="text-[11px] text-gray-400 mt-2">PNG, JPG, JPEG (max 50MB)</p>
+                        </div>
+                      ) : (
+                        /* Uploaded Slices Cards Grid & Add More Tile */
+                        <div className="space-y-4">
+                          <div className="flex flex-wrap items-center justify-between text-xs text-gray-600 font-medium pb-3 border-b border-gray-200/80 gap-2">
+                            <span className="flex items-center gap-2">
+                              <span className="font-bold text-gray-900 capitalize">{activeViewTab} View</span>
+                              <span className="bg-brand-50 text-brand-700 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+                                {activeViewSlices.length} slices
+                              </span>
+                            </span>
+                            <span className="text-gray-400 italic">Drag to reorder • Tag key slices</span>
+                          </div>
+
+                          {activeViewSlices.length === 0 ? (
+                            <div className="text-center py-8 bg-white rounded-xl border border-dashed border-gray-200">
+                              <p className="text-sm text-gray-500 font-medium">No {activeViewTab} slices uploaded.</p>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="mt-2 text-xs font-semibold text-brand-600 hover:underline"
+                              >
+                                Upload {activeViewTab} slices now
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {activeViewSlices.map((slice, index) => (
+                                <div
+                                  key={slice.id}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData("text/plain", slice.id);
+                                    e.dataTransfer.effectAllowed = "move";
+                                    setDraggedSliceId(slice.id);
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = "move";
+                                    if (
+                                      draggedSliceId &&
+                                      draggedSliceId !== slice.id &&
+                                      dragOverSliceId !== slice.id
+                                    ) {
+                                      setDragOverSliceId(slice.id);
+                                    }
+                                  }}
+                                  onDragLeave={() => {
+                                    if (dragOverSliceId === slice.id) {
+                                      setDragOverSliceId(null);
+                                    }
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    handleSliceDrop(slice.id);
+                                    setDraggedSliceId(null);
+                                    setDragOverSliceId(null);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggedSliceId(null);
+                                    setDragOverSliceId(null);
+                                  }}
+                                  className={`relative rounded-xl border p-3.5 bg-white transition-all flex flex-col justify-between cursor-grab active:cursor-grabbing select-none ${
+                                    draggedSliceId === slice.id
+                                      ? "opacity-40 scale-95 border-dashed border-brand-500 bg-brand-50/20"
+                                      : dragOverSliceId === slice.id
+                                      ? "ring-2 ring-brand-500 border-brand-400 bg-brand-50/40 scale-[1.02] shadow-md"
+                                      : slice.isKey
+                                      ? "border-slate-400 ring-2 ring-slate-400/15 bg-slate-50/50 shadow-sm"
+                                      : "border-gray-200 hover:border-brand-300"
+                                  }`}
+                                >
+                                  {slice.isKey && (
+                                    <div className="absolute -top-2.5 left-4 bg-cyan-900 text-white text-[10px] font-semibold px-2.5 py-0.5 rounded shadow-sm flex items-center gap-1.5 z-10 border border-cyan-700/50">
+                                      <i className="fas fa-bookmark text-cyan-300"></i> Key Diagnostic Slice
+                                    </div>
+                                  )}
+
+                                  <div>
+                                    <div className="flex items-start gap-3 mb-3">
+                                      <div className="flex flex-col items-center justify-center pt-3 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing">
+                                        <i className="fas fa-grip-vertical text-xs" title="Drag card to reorder"></i>
+                                      </div>
+
+                                      {/* Clickable Thumbnail for Full Preview */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewSliceId(slice.id)}
+                                        className="w-16 h-16 rounded-xl bg-gray-900 flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200 relative group cursor-pointer"
+                                        title="Click for full preview"
+                                      >
+                                        {slice.previewUrl ? (
+                                          <img
+                                            src={slice.previewUrl}
+                                            alt={slice.filename}
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                          />
+                                        ) : (
+                                          <i className="fas fa-brain text-brand-400 text-xl"></i>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-xs">
+                                          <i className="fas fa-search-plus"></i>
+                                        </div>
+                                        <span className="absolute bottom-0 right-0 bg-black/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-tl">
+                                          #{index + 1}
+                                        </span>
+                                      </button>
+
+                                      <div className="min-w-0 flex-1 flex flex-col justify-between h-16">
+                                        <div>
+                                          <div className="flex items-center justify-between gap-1">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <h4
+                                                className="text-xs font-bold text-gray-900 truncate"
+                                                title={slice.filename}
+                                              >
+                                                {slice.filename}
+                                              </h4>
+                                              {!slice.isExisting && (
+                                                <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0">
+                                                  NEW
+                                                </span>
+                                              )}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => removeSlice(slice.id)}
+                                              className="text-gray-400 hover:text-red-600 p-0.5 shrink-0"
+                                              title="Remove slice"
+                                            >
+                                              <i className="fas fa-times text-xs"></i>
+                                            </button>
+                                          </div>
+                                          <p className="text-[11px] text-gray-500">{formatSliceSize(slice)}</p>
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[10px] uppercase font-bold text-gray-400">View:</span>
+                                          <select
+                                            value={(slice.plane || "axial").toLowerCase()}
+                                            onChange={(e) => updateSliceView(slice.id, e.target.value)}
+                                            className="text-xs border border-gray-300 rounded-md py-0.5 px-2 bg-white text-gray-800 font-medium focus:ring-brand-500 focus:border-brand-500"
+                                          >
+                                            <option value="axial">Axial</option>
+                                            <option value="coronal">Coronal</option>
+                                            <option value="sagittal">Sagittal</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Clean Medical Action Toolbar */}
+                                  <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSliceKey(slice.id)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1.5 transition-colors ${
+                                        slice.isKey
+                                          ? "bg-cyan-900 text-white shadow-xs border border-cyan-700/50"
+                                          : "bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
+                                      }`}
+                                      title="Toggle Key Slice"
+                                    >
+                                      <i
+                                        className={`fas fa-bookmark text-xs ${
+                                          slice.isKey ? "text-cyan-300" : "text-gray-400"
+                                        }`}
+                                      ></i>
+                                      <span>Key Slice</span>
+                                    </button>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewSliceId(slice.id)}
+                                        className="w-7 h-7 rounded-lg border border-gray-200 bg-gray-50 hover:bg-brand-50 hover:text-brand-600 hover:border-brand-300 text-gray-600 flex items-center justify-center transition-colors"
+                                        title="Full image preview"
+                                      >
+                                        <i className="fas fa-expand-alt text-xs"></i>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={index === 0}
+                                        onClick={() => moveSlice(slice.id, "up")}
+                                        className="w-7 h-7 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                                        title="Move slice left"
+                                      >
+                                        <i className="fas fa-chevron-left text-xs"></i>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={index === activeViewSlices.length - 1}
+                                        onClick={() => moveSlice(slice.id, "down")}
+                                        className="w-7 h-7 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                                        title="Move slice right"
+                                      >
+                                        <i className="fas fa-chevron-right text-xs"></i>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Inline Add More Slices Tile */}
+                              <div
+                                onClick={() => fileInputRef.current?.click()}
+                                className="border-2 border-dashed border-gray-300 hover:border-brand-500 hover:bg-brand-50/40 bg-white rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-all min-h-[160px] text-center group"
+                              >
+                                <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                                  <i className="fas fa-plus text-base"></i>
+                                </div>
+                                <span className="text-xs font-bold text-gray-800 group-hover:text-brand-600">
+                                  Add {uploadTargetView.toUpperCase()} Slices
+                                </span>
+                                <span className="text-[11px] text-gray-400 mt-1">Click or drop files here</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <input
-                        accept=".png,.jpg,.jpeg"
-                        className="hidden"
+                        accept={ACCEPTED_EXTENSIONS.join(",")}
+                        className="sr-only"
                         multiple
                         onChange={handleFileUpload}
                         ref={fileInputRef}
                         type="file"
                       />
-                      <i className="fas fa-cloud-arrow-up text-brand-500 text-2xl mb-1.5"></i>
-                      <p className="text-xs font-semibold text-gray-700">Drag and drop image slices here, or browse files</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">PNG or JPG files up to 50MB</p>
                     </div>
                   </div>
 
-                  {/* Overview Montages (Matching Submission.jsx) */}
-                  <div className="border-t border-gray-200 pt-5 space-y-4">
+                  {/* Section 2: Volume Montages (Optional) */}
+                  <div className="border-t border-gray-200 pt-6 space-y-4">
                     <div>
                       <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                        <i className="fas fa-th text-brand-500"></i> Overview Montages <span className="text-xs font-normal text-gray-500">(Optional)</span>
+                        <i className="fas fa-th text-brand-500"></i> Overview Montages{" "}
+                        <span className="text-xs font-normal text-gray-500">(Optional)</span>
                       </h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Upload multi-slice grid montages for each view.
-                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Upload multi-slice grid montages for each view.</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* Axial */}
-                      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2 font-semibold text-xs text-gray-800">
-                            <i className="fas fa-square text-brand-500"></i> Axial Montage Grid
-                          </div>
-                          {editForm.axialMontageFile ? (
-                            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex items-center justify-between">
-                              <span className="truncate max-w-[120px] font-medium" title={editForm.axialMontageFile.name}>
-                                {editForm.axialMontageFile.name}
-                              </span>
-                              <button
-                                className="text-emerald-700 hover:text-red-600 ml-2"
-                                onClick={() => setEditForm((c) => ({ ...c, axialMontageFile: null }))}
-                                title="Remove montage file"
-                                type="button"
-                              >
-                                <i className="fas fa-times"></i>
-                              </button>
+                      {[
+                        {
+                          existing: editForm.existingAxialMontage,
+                          file: editForm.axialMontageFile,
+                          icon: "fa-square",
+                          label: "Axial Montage Grid",
+                          onClearExisting: () =>
+                            setEditForm((c) => ({
+                              ...c,
+                              deletedFileIds: c.existingAxialMontage
+                                ? [...c.deletedFileIds, c.existingAxialMontage.id]
+                                : c.deletedFileIds,
+                              existingAxialMontage: null,
+                            })),
+                          setFile: (file) => setEditForm((c) => ({ ...c, axialMontageFile: file })),
+                        },
+                        {
+                          existing: editForm.existingCoronalMontage,
+                          file: editForm.coronalMontageFile,
+                          icon: "fa-border-all",
+                          label: "Coronal Montage Grid",
+                          onClearExisting: () =>
+                            setEditForm((c) => ({
+                              ...c,
+                              deletedFileIds: c.existingCoronalMontage
+                                ? [...c.deletedFileIds, c.existingCoronalMontage.id]
+                                : c.deletedFileIds,
+                              existingCoronalMontage: null,
+                            })),
+                          setFile: (file) => setEditForm((c) => ({ ...c, coronalMontageFile: file })),
+                        },
+                        {
+                          existing: editForm.existingSagittalMontage,
+                          file: editForm.sagittalMontageFile,
+                          icon: "fa-columns",
+                          label: "Sagittal Montage Grid",
+                          onClearExisting: () =>
+                            setEditForm((c) => ({
+                              ...c,
+                              deletedFileIds: c.existingSagittalMontage
+                                ? [...c.deletedFileIds, c.existingSagittalMontage.id]
+                                : c.deletedFileIds,
+                              existingSagittalMontage: null,
+                            })),
+                          setFile: (file) => setEditForm((c) => ({ ...c, sagittalMontageFile: file })),
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2 mb-2 font-semibold text-xs text-gray-800">
+                              <i className={`fas ${item.icon} text-brand-500`}></i> {item.label}
                             </div>
-                          ) : editForm.existingAxialMontage ? (
-                            <p className="text-[11px] text-gray-500 mb-3">Current: {editForm.existingAxialMontage.filename || "Uploaded"}</p>
-                          ) : (
-                            <p className="text-[11px] text-gray-400 mb-3">No montage file selected.</p>
-                          )}
-                        </div>
-
-                        <label className="mt-3 block text-center bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg cursor-pointer transition-colors shadow-xs">
-                          <i className="fas fa-upload mr-1.5 text-gray-500"></i>
-                          {editForm.axialMontageFile || editForm.existingAxialMontage ? "Change Image" : "Upload Image"}
-                          <input
-                            accept=".png,.jpg,.jpeg"
-                            className="sr-only"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) setEditForm((c) => ({ ...c, axialMontageFile: e.target.files[0] }));
-                            }}
-                            type="file"
-                          />
-                        </label>
-                      </div>
-
-                      {/* Coronal */}
-                      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2 font-semibold text-xs text-gray-800">
-                            <i className="fas fa-border-all text-brand-500"></i> Coronal Montage Grid
+                            {item.file ? (
+                              <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex items-center justify-between">
+                                <span className="truncate max-w-[120px] font-medium" title={item.file.name}>
+                                  {item.file.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => item.setFile(null)}
+                                  className="text-emerald-700 hover:text-red-600 ml-2"
+                                  title="Remove montage file"
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ) : item.existing ? (
+                              <div className="text-xs text-brand-700 bg-brand-50 border border-brand-200 p-2.5 rounded-lg flex items-center justify-between">
+                                <span
+                                  className="truncate max-w-[120px] font-medium"
+                                  title={item.existing.filename || "Uploaded montage"}
+                                >
+                                  {item.existing.filename || "Current montage"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={item.onClearExisting}
+                                  className="text-brand-700 hover:text-red-600 ml-2"
+                                  title="Remove saved montage"
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-gray-400 mb-3">No montage file selected.</p>
+                            )}
                           </div>
-                          {editForm.coronalMontageFile ? (
-                            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex items-center justify-between">
-                              <span className="truncate max-w-[120px] font-medium" title={editForm.coronalMontageFile.name}>
-                                {editForm.coronalMontageFile.name}
-                              </span>
-                              <button
-                                className="text-emerald-700 hover:text-red-600 ml-2"
-                                onClick={() => setEditForm((c) => ({ ...c, coronalMontageFile: null }))}
-                                title="Remove montage file"
-                                type="button"
-                              >
-                                <i className="fas fa-times"></i>
-                              </button>
-                            </div>
-                          ) : editForm.existingCoronalMontage ? (
-                            <p className="text-[11px] text-gray-500 mb-3">Current: {editForm.existingCoronalMontage.filename || "Uploaded"}</p>
-                          ) : (
-                            <p className="text-[11px] text-gray-400 mb-3">No montage file selected.</p>
-                          )}
+
+                          <label className="mt-3 block text-center bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg cursor-pointer transition-colors shadow-xs">
+                            <i className="fas fa-upload mr-1.5 text-gray-500"></i>
+                            {item.file || item.existing ? "Change Image" : "Upload Image"}
+                            <input
+                              type="file"
+                              accept=".png,.jpg,.jpeg"
+                              className="sr-only"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  item.setFile(e.target.files[0]);
+                                }
+                              }}
+                            />
+                          </label>
                         </div>
-
-                        <label className="mt-3 block text-center bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg cursor-pointer transition-colors shadow-xs">
-                          <i className="fas fa-upload mr-1.5 text-gray-500"></i>
-                          {editForm.coronalMontageFile || editForm.existingCoronalMontage ? "Change Image" : "Upload Image"}
-                          <input
-                            accept=".png,.jpg,.jpeg"
-                            className="sr-only"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) setEditForm((c) => ({ ...c, coronalMontageFile: e.target.files[0] }));
-                            }}
-                            type="file"
-                          />
-                        </label>
-                      </div>
-
-                      {/* Sagittal */}
-                      <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2 font-semibold text-xs text-gray-800">
-                            <i className="fas fa-columns text-brand-500"></i> Sagittal Montage Grid
-                          </div>
-                          {editForm.sagittalMontageFile ? (
-                            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex items-center justify-between">
-                              <span className="truncate max-w-[120px] font-medium" title={editForm.sagittalMontageFile.name}>
-                                {editForm.sagittalMontageFile.name}
-                              </span>
-                              <button
-                                className="text-emerald-700 hover:text-red-600 ml-2"
-                                onClick={() => setEditForm((c) => ({ ...c, sagittalMontageFile: null }))}
-                                title="Remove montage file"
-                                type="button"
-                              >
-                                <i className="fas fa-times"></i>
-                              </button>
-                            </div>
-                          ) : editForm.existingSagittalMontage ? (
-                            <p className="text-[11px] text-gray-500 mb-3">Current: {editForm.existingSagittalMontage.filename || "Uploaded"}</p>
-                          ) : (
-                            <p className="text-[11px] text-gray-400 mb-3">No montage file selected.</p>
-                          )}
-                        </div>
-
-                        <label className="mt-3 block text-center bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-semibold py-2 px-3 rounded-lg cursor-pointer transition-colors shadow-xs">
-                          <i className="fas fa-upload mr-1.5 text-gray-500"></i>
-                          {editForm.sagittalMontageFile || editForm.existingSagittalMontage ? "Change Image" : "Upload Image"}
-                          <input
-                            accept=".png,.jpg,.jpeg"
-                            className="sr-only"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) setEditForm((c) => ({ ...c, sagittalMontageFile: e.target.files[0] }));
-                            }}
-                            type="file"
-                          />
-                        </label>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1748,6 +2044,128 @@ const Profile = () => {
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Lightbox Preview Modal for Slices */}
+      {modalSlice && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in"
+          onClick={() => setPreviewSliceId(null)}
+        >
+          <div
+            className="relative bg-gray-900 border border-gray-800 text-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Top Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="uppercase text-xs font-bold px-2.5 py-1 rounded-full bg-brand-900/60 text-brand-300 border border-brand-700/50">
+                  {modalSlice.plane || "axial"}
+                </span>
+                <h3 className="text-sm font-semibold text-gray-100 truncate" title={modalSlice.filename}>
+                  {modalSlice.filename}
+                </h3>
+                <span className="text-xs text-gray-400 font-mono">
+                  #{modalSliceIndex + 1} of {sameViewModalSlices.length}
+                </span>
+                {modalSlice.isKey && (
+                  <span className="bg-cyan-950 text-cyan-200 border border-cyan-600/50 text-xs px-2.5 py-0.5 rounded font-medium flex items-center gap-1.5">
+                    <i className="fas fa-bookmark text-cyan-400"></i> Key Slice
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewSliceId(null)}
+                className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition-colors"
+                title="Close preview"
+              >
+                <i className="fas fa-times text-lg"></i>
+              </button>
+            </div>
+
+            {/* Modal Image Body */}
+            <div className="flex-1 flex items-center justify-center p-6 bg-black relative min-h-[350px] max-h-[65vh] overflow-hidden">
+              {modalSlice.previewUrl ? (
+                <img
+                  src={modalSlice.previewUrl}
+                  alt={modalSlice.filename}
+                  className="max-h-[60vh] max-w-full object-contain rounded shadow-lg"
+                />
+              ) : (
+                <i className="fas fa-brain text-gray-600 text-6xl"></i>
+              )}
+
+              {/* Prev / Next on-image arrows */}
+              {prevModalSlice && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewSliceId(prevModalSlice.id)}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gray-900/80 border border-gray-700 text-white hover:bg-brand-600 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Previous slice"
+                >
+                  <i className="fas fa-chevron-left"></i>
+                </button>
+              )}
+              {nextModalSlice && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewSliceId(nextModalSlice.id)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gray-900/80 border border-gray-700 text-white hover:bg-brand-600 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Next slice"
+                >
+                  <i className="fas fa-chevron-right"></i>
+                </button>
+              )}
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="flex items-center justify-between p-4 border-t border-gray-800 bg-gray-950 text-xs">
+              <button
+                type="button"
+                onClick={() => toggleSliceKey(modalSlice.id)}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5 ${
+                  modalSlice.isKey
+                    ? "bg-cyan-900 text-white border border-cyan-700/50"
+                    : "bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-700"
+                }`}
+              >
+                <i className={`fas fa-bookmark text-xs ${modalSlice.isKey ? "text-cyan-300" : "text-gray-400"}`}></i>
+                <span>{modalSlice.isKey ? "Key Diagnostic Slice (Active)" : "Mark as Key Slice"}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                {modalSlice.previewUrl && (
+                  <a
+                    href={modalSlice.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+                  >
+                    <i className="fas fa-external-link-alt text-xs"></i>
+                    <span>Open Full Image</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  disabled={!prevModalSlice}
+                  onClick={() => prevModalSlice && setPreviewSliceId(prevModalSlice.id)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-700"
+                >
+                  <i className="fas fa-chevron-left mr-1"></i> Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={!nextModalSlice}
+                  onClick={() => nextModalSlice && setPreviewSliceId(nextModalSlice.id)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-700"
+                >
+                  Next <i className="fas fa-chevron-right ml-1"></i>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

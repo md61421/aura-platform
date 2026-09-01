@@ -700,7 +700,7 @@ function NiftiViewer({ artifact, placeholder }) {
                   <span className="uppercase font-bold text-slate-200">
                     {currentSlice.view || "Axial"} View
                   </span>
-                  {currentSlice.isKeySlice && showOnlyKeySlices && (
+                  {currentSlice.isKeySlice && (
                     <span className="text-[10px] font-bold text-cyan-300 border-l border-slate-700 pl-2 flex items-center gap-1">
                       <i className="fas fa-bookmark text-cyan-400 text-[9px]"></i> Key Slice
                     </span>

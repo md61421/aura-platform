@@ -277,27 +277,51 @@ const mapArtifact = (artifact) => {
             : null;
     }
 
+    const hasSliceMeta = Array.isArray(sliceMetadata) && sliceMetadata.length > 0;
+
     const exampleSlices = representativeFiles.map((file, index) => {
         const url = file.public_url;
-        const urlFilename = String(url.split("/").pop() || "").split("?")[0].toLowerCase();
+        const urlFilename = String(url ? url.split("/").pop() : "").split("?")[0].toLowerCase();
 
         const meta = sliceMetadata.find((s) => {
-            if (!s || !s.filename) return false;
-            const metaName = String(s.filename).toLowerCase();
-            return urlFilename.endsWith(metaName) || metaName.endsWith(urlFilename) || urlFilename.includes(metaName);
-        }) || sliceMetadata[index];
+            if (!s) return false;
+            if (s.id && file.id && String(s.id) === String(file.id)) return true;
+            if (s.public_url && file.public_url && s.public_url === file.public_url) return true;
+            if (s.filename) {
+                const metaName = String(s.filename).toLowerCase();
+                if (file.filename && String(file.filename).toLowerCase() === metaName) return true;
+                if (urlFilename && (urlFilename.endsWith(metaName) || metaName.endsWith(urlFilename) || urlFilename.includes(metaName))) return true;
+            }
+            return false;
+        }) || (sliceMetadata[index] && !sliceMetadata[index].id ? sliceMetadata[index] : null);
 
-        const isKeySlice = file.file_role === "primary_representative" || Boolean(meta?.is_priority || meta?.is_key_slice);
+        const isKeySlice = hasSliceMeta
+            ? Boolean(meta?.isKey || meta?.is_key || meta?.isPriority || meta?.is_priority || meta?.is_key_slice)
+            : file.file_role === "primary_representative";
+
+        const plane = String(meta?.plane || meta?.view || "axial").toLowerCase();
+        const sortIndex = meta?.index !== undefined
+            ? Number(meta.index)
+            : (meta?.slice_order !== undefined ? Number(meta.slice_order) : index);
 
         return {
+            id: file.id,
             url,
             index: index + 1,
-            filename: meta?.filename || urlFilename,
-            view: meta?.view || "axial",
+            sortIndex,
+            filename: meta?.filename || file.filename || urlFilename,
+            view: ["axial", "coronal", "sagittal"].includes(plane) ? plane : "axial",
             isKeySlice,
             isPrimary: file.file_role === "primary_representative",
         };
     });
+
+    if (hasSliceMeta) {
+        exampleSlices.sort((a, b) => a.sortIndex - b.sortIndex);
+        exampleSlices.forEach((slice, idx) => {
+            slice.index = idx + 1;
+        });
+    }
 
     return {
         id: String(artifact.id),

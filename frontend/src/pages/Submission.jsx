@@ -498,8 +498,10 @@ function Submission() {
     const sliceMetadata = slices.map((s, idx) => ({
       filename: s.file.name,
       view: s.view,
-      slice_order: s.order,
+      slice_order: s.order !== undefined ? s.order : idx,
+      index: idx,
       is_priority: idx === primaryIndex || s.isPriority,
+      isKey: idx === primaryIndex || s.isPriority,
     }));
 
     setSubmitAction(action);
