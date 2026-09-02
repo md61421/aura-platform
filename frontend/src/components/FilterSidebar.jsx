@@ -35,13 +35,15 @@ const FilterSidebar = ({ filters, filterOptions, onFilterChange, onReset }) => {
                     </div>
                 </div>
 
-                {/* Category */}
-                <div className="mb-6">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3 uppercase tracking-wider">Category</h4>
-                    <div className="space-y-2">
-                        {filterOptions.categories.map((category) => renderOption("categories", category))}
+                {/* Sequence */}
+                {Boolean(filterOptions.sequences?.length) && (
+                    <div className="mb-6">
+                        <h4 className="text-sm font-medium text-gray-900 mb-3 uppercase tracking-wider">Sequence</h4>
+                        <div className="space-y-2">
+                            {filterOptions.sequences.map((sequence) => renderOption("sequences", sequence))}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Scanner */}
                 <div>

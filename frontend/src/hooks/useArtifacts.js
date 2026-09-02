@@ -8,7 +8,7 @@ const timestampForSort = (value) => {
 
 const defaultFilters = {
     modalities: [],
-    categories: [],
+    sequences: [],
     scanner: "",
 };
 
@@ -143,10 +143,17 @@ export function useArtifacts() {
             }
 
             const matchesModality = filters.modalities.length === 0 || filters.modalities.includes(artifact.modality);
-            const matchesCategory = filters.categories.length === 0 || filters.categories.includes(artifact.category);
+            const artifactSequences = [
+                artifact.sequence,
+                ...(Array.isArray(artifact.images) ? artifact.images.map((img) => img.sequence) : [])
+            ].filter((seq) => seq && seq !== "Not specified");
+            const matchesSequence = !filters.sequences || filters.sequences.length === 0 ||
+                filters.sequences.some((filterSeq) =>
+                    artifactSequences.some((artSeq) => artSeq.toLowerCase() === filterSeq.toLowerCase())
+                );
             const matchesScanner = !filters.scanner || artifact.scanner === filters.scanner;
 
-            return matchesQuery && matchesModality && matchesCategory && matchesScanner;
+            return matchesQuery && matchesModality && matchesSequence && matchesScanner;
         });
 
         // Then apply sorting
@@ -170,11 +177,27 @@ export function useArtifacts() {
         });
     }, [artifacts, filters, query, sortBy]);
 
-    const filterOptions = useMemo(() => ({
-        modalities: uniqueSorted(artifacts.map((artifact) => artifact.modality)),
-        categories: uniqueSorted(artifacts.map((artifact) => artifact.category)),
-        scanners: uniqueSorted(artifacts.map((artifact) => artifact.scanner)),
-    }), [artifacts]);
+    const filterOptions = useMemo(() => {
+        const sequences = [];
+        artifacts.forEach((artifact) => {
+            if (artifact.sequence && typeof artifact.sequence === "string" && artifact.sequence.trim() && artifact.sequence !== "Not specified") {
+                sequences.push(artifact.sequence.trim());
+            }
+            if (Array.isArray(artifact.images)) {
+                artifact.images.forEach((img) => {
+                    if (img.sequence && typeof img.sequence === "string" && img.sequence.trim() && img.sequence !== "Not specified") {
+                        sequences.push(img.sequence.trim());
+                    }
+                });
+            }
+        });
+
+        return {
+            modalities: uniqueSorted(artifacts.map((artifact) => artifact.modality)),
+            sequences: uniqueSorted(sequences),
+            scanners: uniqueSorted(artifacts.map((artifact) => artifact.scanner)),
+        };
+    }, [artifacts]);
 
     const setFilter = (key, value) => {
         setFilters((current) => ({
