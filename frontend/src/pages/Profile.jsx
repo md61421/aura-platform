@@ -10,6 +10,7 @@ import {
   updateMySubmission,
   withdrawMySubmission,
 } from "../services/api";
+import Loader from "../components/Loader";
 
 const STATUS_META = {
   approved: {
@@ -317,13 +318,10 @@ function EmptyState() {
 
 const Profile = () => {
   const {
-    auraRole,
-    auraUser,
     auraUserError,
     auraUserLoading,
     isAuthenticated,
     loading: authLoading,
-    user,
   } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -967,9 +965,11 @@ const Profile = () => {
     return (
       <div className="animate-fade-in mx-auto max-w-3xl py-16">
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-brand-500"></div>
-          <h1 className="text-xl font-bold text-gray-900">Loading account</h1>
-          <p className="mt-2 text-sm text-gray-500">Preparing your submissions.</p>
+          <Loader
+            size="lg"
+            text="Loading account"
+            minHeight="py-4"
+          />
         </div>
       </div>
     );
@@ -981,19 +981,9 @@ const Profile = () => {
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">My Submissions</h2>
-          <p className="text-gray-500">Track artifacts you have published to AURA.</p>
-        </div>
-        <div className="flex flex-col items-start gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center">
-          <span className="max-w-72 truncate text-sm font-semibold text-gray-800">
-            {auraUser?.email || user?.email}
-          </span>
-          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-600">
-            {auraRole || "contributor"}
-          </span>
-        </div>
+      <div className="mb-8">
+        <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">My Submissions</h2>
+        <p className="text-gray-500">Track artifacts you have published to AURA.</p>
       </div>
 
       {auraUserError && (
@@ -1028,9 +1018,12 @@ const Profile = () => {
       )}
 
       {isLoading ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-brand-500"></div>
-          <p className="font-semibold text-gray-700">Loading submissions...</p>
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+          <Loader
+            size="lg"
+            text="Loading submissions..."
+            minHeight="py-6"
+          />
         </div>
       ) : submissions.length === 0 ? (
         <EmptyState />
@@ -2033,10 +2026,7 @@ const Profile = () => {
                   type="submit"
                 >
                   {isActionBusy ? (
-                    <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Saving...
-                    </>
+                    <Loader size="xs" variant="white" inline text="Saving..." />
                   ) : (
                     "Save Changes"
                   )}

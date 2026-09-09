@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { createSubmission, fetchArtifacts, fetchMetadataSchema } from "../services/api";
+import Loader from "../components/Loader";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_FILES = 500;
@@ -533,11 +534,13 @@ function Submission() {
 
   if (authLoading) {
     return (
-      <div className="animate-fade-in max-w-4xl mx-auto">
+      <div className="animate-fade-in max-w-4xl mx-auto py-12">
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto mb-4 h-8 w-8 rounded-full border-2 border-gray-200 border-t-brand-500 animate-spin"></div>
-          <h1 className="text-xl font-bold text-gray-900">Checking sign-in status</h1>
-          <p className="mt-2 text-sm text-gray-500">Preparing the submission workspace.</p>
+          <Loader
+            size="lg"
+            text="Checking sign-in status"
+            minHeight="py-4"
+          />
         </div>
       </div>
     );
@@ -1279,9 +1282,7 @@ function Submission() {
                     </div>
                   </div>
                   {loadingSchema && (
-                    <span className="text-xs text-brand-600 font-semibold flex items-center gap-1.5">
-                      <i className="fas fa-spinner fa-spin"></i> Loading schema...
-                    </span>
+                    <Loader size="xs" inline text="Loading schema..." />
                   )}
                 </div>
 

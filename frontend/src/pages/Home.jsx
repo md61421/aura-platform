@@ -3,6 +3,7 @@ import FilterSidebar from "../components/FilterSidebar";
 import ArtifactCard from "../components/ArtifactCard";
 import SearchBar from "../components/SearchBar";
 import Pagination from "../components/Pagination";
+import Loader from "../components/Loader";
 import { useArtifacts } from "../hooks/useArtifacts";
 
 const SORT_OPTIONS = [
@@ -73,7 +74,13 @@ function Home() {
   };
 
   if (isLoading) {
-    return <div className="text-center py-20 text-gray-500">Loading artifacts...</div>;
+    return (
+      <Loader
+        fullPage
+        size="lg"
+        text="Loading artifacts..."
+      />
+    );
   }
 
   if (error) {

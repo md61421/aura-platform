@@ -10,6 +10,7 @@ import {
   fetchMetadataSchema,
 } from "../services/api";
 import { useAuth } from "../auth/useAuth";
+import Loader from "../components/Loader";
 
 const NiftiViewer = lazy(() => import("../components/NiftiViewer"));
 
@@ -96,12 +97,11 @@ function Detail() {
 
   if (isLoading) {
     return (
-      <div className="text-center py-20 text-gray-500 animate-fade-in">
-        <div className="inline-flex items-center gap-3">
-          <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-brand-500 animate-spin"></div>
-          <span className="text-sm font-medium">Loading details…</span>
-        </div>
-      </div>
+      <Loader
+        fullPage
+        size="lg"
+        text="Loading artifact details..."
+      />
     );
   }
 
@@ -282,8 +282,12 @@ function Detail() {
             <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-slate-700/30 to-transparent pointer-events-none hidden lg:block"></div>
             <Suspense
               fallback={
-                <div className="flex-grow h-full flex items-center justify-center bg-slate-950 text-sm font-medium text-slate-400">
-                  <i className="fas fa-spinner fa-spin mr-2"></i> Loading Workstation...
+                <div className="flex-grow h-full flex items-center justify-center bg-slate-950">
+                  <Loader
+                    variant="dark"
+                    size="md"
+                    text="Loading Workstation..."
+                  />
                 </div>
               }
             >
@@ -614,10 +618,11 @@ function Detail() {
 
               {/* Comments List */}
               {commentsLoading ? (
-                <div className="py-6 text-center text-xs text-gray-400">
-                  <div className="w-4 h-4 border-2 border-gray-300 border-t-brand-500 rounded-full animate-spin mx-auto mb-2"></div>
-                  Loading discussions...
-                </div>
+                <Loader
+                  size="sm"
+                  text="Loading discussions..."
+                  minHeight="py-6"
+                />
               ) : comments.length === 0 ? (
                 <div className="py-8 text-center bg-gray-50/70 rounded-2xl border border-dashed border-gray-200">
                   <i className="far fa-comment-dots text-2xl text-gray-300 mb-2 block"></i>

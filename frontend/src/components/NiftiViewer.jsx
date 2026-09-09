@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DRAG_MODE, Niivue, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
+import Loader from "./Loader";
 
 const sliceOptions = [
   { label: "Axial", value: SLICE_TYPE.AXIAL, icon: "fa-square", tooltip: "Axial Slice View" },
@@ -547,11 +548,12 @@ function NiftiViewer({ artifact, placeholder }) {
         {mediaView === "volume" ? (
           <>
             {isLoading && (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#020612]">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-10 h-10 rounded-full border-2 border-slate-700 border-t-cyan-500 animate-spin"></div>
-                  <p className="text-xs font-semibold text-slate-400 tracking-wide">Loading volume…</p>
-                </div>
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#020612]/95 backdrop-blur-xs">
+                <Loader
+                  variant="dark"
+                  size="md"
+                  text="Loading volume…"
+                />
               </div>
             )}
 

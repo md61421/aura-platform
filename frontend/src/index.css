@@ -16,6 +16,16 @@
   --animate-viewer-fade: viewerFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   --animate-crossfade: crossfade 0.35s ease-in-out;
   --animate-subtle-pulse: subtlePulse 2s ease-in-out infinite;
+  --animate-aura-spin: auraSpin 0.9s linear infinite;
+
+  @keyframes auraSpin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
@@ -37,6 +47,13 @@
     50% { opacity: 0.8; }
   }
 }
+
+.animate-aura-spin {
+  animation: auraSpin 0.9s linear infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
 
 @layer base {
   body {

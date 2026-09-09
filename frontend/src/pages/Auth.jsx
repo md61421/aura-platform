@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/useAuth";
+import Loader from "../components/Loader";
 
 const safeNextPath = (value) => {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -61,7 +62,18 @@ function Auth() {
     }
   };
 
-  if (!authLoading && isAuthenticated) {
+  if (authLoading) {
+    return (
+      <Loader
+        fullPage
+        size="lg"
+        text="Checking session..."
+        minHeight="min-h-[calc(100vh-14rem)]"
+      />
+    );
+  }
+
+  if (isAuthenticated) {
     return <Navigate replace to={nextPath} />;
   }
 
@@ -116,7 +128,11 @@ function Auth() {
             disabled={authLoading || isSending || !isSupabaseConfigured}
             type="submit"
           >
-            {isSending ? "Sending..." : "Send magic link"}
+            {isSending ? (
+              <Loader size="xs" variant="white" inline text="Sending magic link..." />
+            ) : (
+              "Send magic link"
+            )}
           </button>
         </form>
 

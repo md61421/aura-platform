@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import Loader from "./Loader";
 
 const Navbar = () => {
   const location = useLocation();
@@ -56,7 +57,7 @@ const Navbar = () => {
               : "hidden sm:inline-flex items-center text-sm font-medium text-gray-400"
           }
         >
-          Checking session...
+          <Loader size="xs" inline text="Checking session..." />
         </span>
       );
     }

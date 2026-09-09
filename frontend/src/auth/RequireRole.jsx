@@ -1,6 +1,7 @@
 import { Link, Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "./useAuth";
+import Loader from "../components/Loader";
 
 const ROLE_LABELS = {
   admin: "Admin",
@@ -36,9 +37,11 @@ export function RequireRole({ allowedRoles, children }) {
 
   if (loading || auraUserLoading) {
     return (
-      <AccessPanel
-        title="Checking access"
-        message="Confirming your AURA role before opening this workspace."
+      <Loader
+        fullPage
+        size="lg"
+        text="Checking access permissions..."
+        minHeight="min-h-[50vh]"
       />
     );
   }

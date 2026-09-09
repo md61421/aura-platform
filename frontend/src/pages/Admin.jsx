@@ -10,6 +10,7 @@ import {
   updateMetadataField,
   deleteMetadataField,
 } from "../services/api";
+import Loader from "../components/Loader";
 
 const ACTION_COPY = {
   archive: {
@@ -398,9 +399,6 @@ const Admin = () => {
               <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/20 px-3 py-1 text-xs font-semibold text-brand-300 ring-1 ring-brand-400/30">
                 <i className="fas fa-shield-halved"></i> Control Panel
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/30">
-                <i className="fas fa-circle text-[8px] animate-pulse"></i> API Active
-              </span>
             </div>
             <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
               Admin Panel
@@ -596,9 +594,12 @@ const Admin = () => {
 
           {/* Artifacts Table */}
           {isLoading ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
-              <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-3 border-gray-200 border-t-brand-600"></div>
-              <p className="font-bold text-gray-700">Loading moderation records...</p>
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+              <Loader
+                size="lg"
+                text="Loading moderation records..."
+                minHeight="py-6"
+              />
             </div>
           ) : filteredArtifacts.length > 0 ? (
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
