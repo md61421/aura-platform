@@ -145,12 +145,12 @@ const Admin = () => {
   const [editType, setEditType] = useState("text");
   const [editRequired, setEditRequired] = useState(false);
 
-  const loadArtifacts = async () => {
+  const loadArtifacts = async (skipCache = false) => {
     setIsLoading(true);
     setError("");
 
     try {
-      const data = await fetchArtifacts({ limit: 100 });
+      const data = await fetchArtifacts({ limit: 100 }, { skipCache });
       setArtifacts(data);
     } catch (loadError) {
       setError(loadError.message || "Unable to load artifacts.");
@@ -419,7 +419,7 @@ const Admin = () => {
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20 transition-all border border-white/10 disabled:opacity-60"
               disabled={isLoading}
-              onClick={loadArtifacts}
+              onClick={() => loadArtifacts(true)}
               type="button"
             >
               <i className={`fas fa-rotate-right ${isLoading ? "animate-spin" : ""}`}></i>

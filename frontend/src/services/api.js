@@ -374,41 +374,84 @@ const mapArtifact = (artifact) => {
     };
 };
 
+const clientCache = new Map();
+const inFlightRequests = new Map();
+const CLIENT_CACHE_TTL_MS = 60 * 1000;
+
+export const clearApiClientCache = () => {
+    clientCache.clear();
+    inFlightRequests.clear();
+};
+
 const requestJson = async (path, options = {}) => {
-    const accessToken = await getAccessToken();
-    const isFormData = options.body instanceof FormData;
-    const headers = {
-        Accept: "application/json",
-        ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...(options.headers || {}),
+    const method = (options.method || "GET").toUpperCase();
+    const isGet = method === "GET";
+    const cacheKey = `${path}`;
+
+    if (isGet && !options.skipCache) {
+        const cached = clientCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+            return cached.data;
+        }
+        if (inFlightRequests.has(cacheKey)) {
+            return inFlightRequests.get(cacheKey);
+        }
+    }
+
+    const executeFetch = async () => {
+        const accessToken = await getAccessToken();
+        const isFormData = options.body instanceof FormData;
+        const headers = {
+            Accept: "application/json",
+            ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            ...(options.headers || {}),
+        };
+
+        let response;
+        try {
+            response = await fetch(`${API_BASE_URL}${path}`, {
+                ...options,
+                headers,
+            });
+        } catch (err) {
+            console.error("Fetch request error:", err);
+            throw new Error(
+                `Cannot connect to the AURA API backend server (${API_BASE_URL}): ${err?.message || "Network request failed"}. Ensure the FastAPI backend server is reachable.`
+            );
+        }
+
+        if (response.status === 404) {
+            return null;
+        }
+        if (!response.ok) {
+            throw new Error(await parseApiError(response));
+        }
+
+        if (response.status === 204) {
+            return true;
+        }
+
+        const data = await response.json();
+
+        if (isGet && !options.skipCache) {
+            clientCache.set(cacheKey, { data, timestamp: Date.now() });
+        } else if (!isGet) {
+            clearApiClientCache();
+        }
+
+        return data;
     };
 
-    let response;
-    try {
-        response = await fetch(`${API_BASE_URL}${path}`, {
-            ...options,
-            headers,
+    if (isGet && !options.skipCache) {
+        const promise = executeFetch().finally(() => {
+            inFlightRequests.delete(cacheKey);
         });
-    } catch (err) {
-        console.error("Fetch request error:", err);
-        throw new Error(
-            `Cannot connect to the AURA API backend server (${API_BASE_URL}): ${err?.message || "Network request failed"}. Ensure the FastAPI backend server is reachable.`
-        );
+        inFlightRequests.set(cacheKey, promise);
+        return promise;
     }
 
-    if (response.status === 404) {
-        return null;
-    }
-    if (!response.ok) {
-        throw new Error(await parseApiError(response));
-    }
-
-    if (response.status === 204) {
-        return true;
-    }
-
-    return response.json();
+    return executeFetch();
 };
 
 const buildQueryString = (params = {}) => {
@@ -424,13 +467,13 @@ const buildQueryString = (params = {}) => {
     return query ? `?${query}` : "";
 };
 
-export const fetchArtifacts = async (params = {}) => {
-    const artifacts = await requestJson(`/artifacts${buildQueryString(params)}`);
+export const fetchArtifacts = async (params = {}, options = {}) => {
+    const artifacts = await requestJson(`/artifacts${buildQueryString(params)}`, options);
     return asArray(artifacts).map(mapArtifact);
 };
 
-export const fetchArtifactById = async (id) => {
-    const artifact = await requestJson(`/artifacts/${encodeURIComponent(id)}`);
+export const fetchArtifactById = async (id, options = {}) => {
+    const artifact = await requestJson(`/artifacts/${encodeURIComponent(id)}`, options);
     return artifact ? mapArtifact(artifact) : null;
 };
 
@@ -596,8 +639,8 @@ export const createSubmission = async ({
     });
 };
 
-export const fetchMetadataSchema = async (modality) =>
-    requestJson(`/metadata-schema${buildQueryString(modality ? { modality } : {})}`);
+export const fetchMetadataSchema = async (modality, options = {}) =>
+    requestJson(`/metadata-schema${buildQueryString(modality ? { modality } : {})}`, options);
 
 export const createMetadataField = async (payload) =>
     requestJson("/metadata-schema", {

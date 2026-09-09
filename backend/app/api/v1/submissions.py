@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.v1.artifacts import invalidate_artifacts_cache
 from app.core.config import settings
 from app.core.dependencies import get_db_session, require_contributor
 from app.core.exceptions import bad_request_exception, forbidden_exception, not_found_exception
@@ -884,6 +885,7 @@ def update_my_submission(
     )
 
     db.commit()
+    invalidate_artifacts_cache()
     db.refresh(submission)
     return _submission_summary(submission)
 
@@ -908,6 +910,7 @@ def withdraw_my_submission(
             image_file.public_url = None
 
     db.commit()
+    invalidate_artifacts_cache()
     db.refresh(submission)
     return _submission_summary(submission)
 
@@ -947,6 +950,7 @@ def republish_my_submission(
             image_file.public_url = None
 
     db.commit()
+    invalidate_artifacts_cache()
     db.refresh(submission)
     return _submission_summary(submission)
 
@@ -1182,6 +1186,7 @@ def create_submission(
                 stored_file_rows.append((m_file, m_upload.filename))
 
         db.commit()
+        invalidate_artifacts_cache()
         db.refresh(submission)
         db.refresh(artifact)
         db.refresh(image)

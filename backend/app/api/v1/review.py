@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.v1.artifacts import invalidate_artifacts_cache
 from app.core.dependencies import get_db_session, require_admin, require_reviewer
 from app.core.exceptions import not_found_exception
 from app.db.models import Artifact, Image, ImageArtifact, ReviewAction, Submission, User
@@ -109,6 +110,7 @@ def _moderate_artifact(
     )
     db.flush()
     db.commit()
+    invalidate_artifacts_cache()
 
     return ArtifactModerationRead(
         artifact_id=artifact.id,

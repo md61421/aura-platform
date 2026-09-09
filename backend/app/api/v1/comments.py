@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import case, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.api.v1.artifacts import invalidate_artifacts_cache
 from app.core.dependencies import get_current_user_optional, get_db_session, require_user
 from app.core.exceptions import forbidden_exception, not_found_exception
 from app.db.models import Comment, ImageArtifact, User
@@ -124,6 +125,7 @@ def create_artifact_comment(
     )
     db.add(comment)
     db.commit()
+    invalidate_artifacts_cache()
 
     return CommentItemRead(
         id=comment_id,
@@ -157,3 +159,4 @@ def delete_comment(
 
     db.delete(comment)
     db.commit()
+    invalidate_artifacts_cache()

@@ -1,3 +1,4 @@
+import time
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +20,15 @@ from app.schemas.artifact import (
 )
 
 router = APIRouter()
+
+_CACHE_TTL = 60.0  # 60 seconds TTL for fast repeat reads
+_LIST_CACHE: dict[tuple, tuple[float, list[ArtifactSummaryRead]]] = {}
+_DETAIL_CACHE: dict[tuple, tuple[float, ArtifactDetailRead]] = {}
+
+
+def invalidate_artifacts_cache() -> None:
+    _LIST_CACHE.clear()
+    _DETAIL_CACHE.clear()
 
 
 def _artifact_options():
@@ -191,6 +201,22 @@ def list_artifacts(
     status: ArtifactStatus | None = Query(default=None),
     tag: str | None = Query(default=None),
 ):
+    user_id = current_user.id if current_user else None
+    cache_key = (
+        skip,
+        limit,
+        search,
+        modality.value if modality else None,
+        status.value if status else None,
+        tag.strip().lower() if tag else None,
+        user_id,
+    )
+    now = time.monotonic()
+    if cache_key in _LIST_CACHE:
+        cached_at, cached_data = _LIST_CACHE[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return cached_data
+
     statement = select(Artifact).options(*_artifact_options())
 
     if status:
@@ -254,8 +280,9 @@ def list_artifacts(
 
     statement = statement.order_by(Artifact.title).offset(skip).limit(limit)
     artifacts = db.scalars(statement).unique().all()
-    user_id = current_user.id if current_user else None
-    return [_artifact_summary(artifact, user_id) for artifact in artifacts]
+    results = [_artifact_summary(artifact, user_id) for artifact in artifacts]
+    _LIST_CACHE[cache_key] = (now, results)
+    return results
 
 
 @router.get("/{artifact_id}", response_model=ArtifactDetailRead)
@@ -264,6 +291,14 @@ def get_artifact(
     current_user: Annotated[User | None, Depends(get_current_user_optional)] = None,
     db: Session = Depends(get_db_session),
 ):
+    user_id = current_user.id if current_user else None
+    cache_key = (artifact_id, user_id)
+    now = time.monotonic()
+    if cache_key in _DETAIL_CACHE:
+        cached_at, cached_data = _DETAIL_CACHE[cache_key]
+        if now - cached_at < _CACHE_TTL:
+            return cached_data
+
     statement = (
         select(Artifact)
         .where(Artifact.id == artifact_id)
@@ -274,6 +309,7 @@ def get_artifact(
     if not artifact:
         raise not_found_exception("Artifact")
 
-    user_id = current_user.id if current_user else None
-    return _artifact_detail(artifact, user_id)
+    detail = _artifact_detail(artifact, user_id)
+    _DETAIL_CACHE[cache_key] = (now, detail)
+    return detail
 

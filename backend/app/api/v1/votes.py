@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.v1.artifacts import invalidate_artifacts_cache
 from app.core.dependencies import get_current_user_optional, get_db_session, require_user
 from app.core.exceptions import not_found_exception
 from app.db.models import Artifact, Image, ImageArtifact, User, Vote
@@ -141,6 +142,7 @@ def cast_or_toggle_artifact_vote(
     )
     image.reliability_score = agreements - disagreements
     db.commit()
+    invalidate_artifacts_cache()
 
     return VoteSummaryRead(
         artifact_id=artifact.id,
