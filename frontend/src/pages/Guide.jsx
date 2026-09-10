@@ -65,7 +65,7 @@ export default function Guide() {
               }`}
             >
               <i className="fas fa-shield-halved text-sm"></i>
-              As an Admin / Reviewer
+              As an Admin
             </button>
           </div>
         </div>
@@ -180,6 +180,22 @@ export default function Guide() {
                 <p className="text-sm text-gray-600 mt-1">
                   Users with reviewer or admin rights will see the <strong>Admin Panel</strong> link in the top navigation bar. Click it to open the moderation dashboard.
                 </p>
+
+                {/* OSIPI Role Assignment Callout (Method 3: Supabase Table Editor) */}
+                <div className="mt-3.5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs text-slate-700 space-y-1.5">
+                  <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                    <i className="fas fa-user-shield text-purple-600"></i> How OSIPI Grants Admin Access
+                  </div>
+                  <p className="text-gray-600">
+                    To grant someone Admin privileges directly in the <strong>Supabase Table Editor</strong>:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-gray-600 pl-1">
+                    <li>Go to the <strong>Supabase Dashboard ➔ Table Editor</strong> and select the <code className="px-1 py-0.5 rounded bg-gray-200 font-mono text-[11px]">users</code> table.</li>
+                    <li>Find the user's row by their email address (the user must have signed in to AURA at least once).</li>
+                    <li>Double-click the <code className="px-1 py-0.5 rounded bg-gray-200 font-mono text-[11px]">role</code> column cell and change it to <code className="px-1 py-0.5 rounded bg-purple-100 text-purple-800 font-bold font-mono text-[11px]">admin</code>.</li>
+                    <li>Save changes. The user will automatically see the <strong>Admin Panel</strong> link on their next page load.</li>
+                  </ol>
+                </div>
               </div>
             </div>
 
