@@ -28,6 +28,9 @@ const dragModeOptions = [
 function NiftiViewer({ artifact, placeholder }) {
   const canvasRef = useRef(null);
   const niivueRef = useRef(null);
+  const thumbnailRailRef = useRef(null);
+  const thumbnailItemRefs = useRef([]);
+  const [thumbnailScrollPercent, setThumbnailScrollPercent] = useState(0);
 
   const volumes = artifact?.niftiVolumes || [];
   const examples = artifact?.examples || [];
@@ -243,15 +246,57 @@ function NiftiViewer({ artifact, placeholder }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mediaView, displaySlices.length]);
 
-  /* 2D Mouse Wheel Slice Scrubbing */
+  /* 2D Mouse Wheel: Scroll Thumbnail Rail horizontally instead of scrolling full-size image */
   const handleWheel2D = (e) => {
     if (mediaView !== "images" || displaySlices.length <= 1) return;
-    if (e.deltaY > 0) {
-      setActiveImageIndex((prev) => (prev < displaySlices.length - 1 ? prev + 1 : 0));
-    } else if (e.deltaY < 0) {
-      setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : displaySlices.length - 1));
+    if (thumbnailRailRef.current) {
+      thumbnailRailRef.current.scrollLeft += e.deltaY;
     }
   };
+
+  /* Scrollbar slider handler: controls scrolling through thumbnail slices */
+  const handleThumbnailSliderChange = (e) => {
+    const percent = Number(e.target.value);
+    setThumbnailScrollPercent(percent);
+    if (thumbnailRailRef.current) {
+      const maxScroll = thumbnailRailRef.current.scrollWidth - thumbnailRailRef.current.clientWidth;
+      if (maxScroll > 0) {
+        thumbnailRailRef.current.scrollLeft = (percent / 100) * maxScroll;
+      }
+    }
+  };
+
+  /* Keep scrollbar slider position in sync with thumbnail rail scroll */
+  const handleThumbnailRailScroll = () => {
+    if (thumbnailRailRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = thumbnailRailRef.current;
+      const maxScroll = scrollWidth - clientWidth;
+      if (maxScroll > 0) {
+        setThumbnailScrollPercent(Math.round((scrollLeft / maxScroll) * 100));
+      } else {
+        setThumbnailScrollPercent(0);
+      }
+    }
+  };
+
+  /* Chevron buttons: scroll thumbnails left / right smoothly */
+  const handleScrollThumbnails = (direction) => {
+    if (thumbnailRailRef.current) {
+      const offset = direction === "left" ? -180 : 180;
+      thumbnailRailRef.current.scrollBy({ left: offset, behavior: "smooth" });
+    }
+  };
+
+  /* Auto-scroll selected thumbnail into view when active slice changes */
+  useEffect(() => {
+    if (thumbnailItemRefs.current[safeActiveImageIndex]) {
+      thumbnailItemRefs.current[safeActiveImageIndex]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [safeActiveImageIndex]);
 
   const handleSliceType = (nextSliceType) => {
     setSliceType(nextSliceType);
@@ -813,71 +858,83 @@ function NiftiViewer({ artifact, placeholder }) {
         </div>
       )}
 
-      {/* Clean 2D Combined Slider + Thumbnail Rail Toolbar */}
+      {/* 2D Slice Navigation & Thumbnail Rail Toolbar */}
       {mediaView !== "volume" && displaySlices.length > 1 && (
         <div className="border-t border-white/10 bg-[#06101f]/95 p-3 z-20 flex flex-col gap-2.5">
-          {/* Row 1: Range Slider & Counter */}
-          <div className="flex items-center gap-3 max-w-3xl mx-auto w-full px-2">
+          {/* Row 1: Thumbnail Rail with Left/Right Scroll Controls */}
+          <div className="flex items-center gap-2 max-w-3xl mx-auto w-full px-1">
             <button
               type="button"
-              onClick={() => setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : displaySlices.length - 1))}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer p-1"
-              title="Previous Slice"
+              onClick={() => handleScrollThumbnails("left")}
+              className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center flex-shrink-0 shadow-xs"
+              title="Scroll thumbnails left"
             >
               <i className="fas fa-chevron-left text-xs"></i>
             </button>
 
-            <input
-              type="range"
-              min={0}
-              max={displaySlices.length - 1}
-              value={safeActiveImageIndex}
-              onChange={(e) => setActiveImageIndex(Number(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 accent-brand-500 rounded-lg cursor-pointer transition-all"
-            />
-
-            <button
-              type="button"
-              onClick={() => setActiveImageIndex((prev) => (prev < displaySlices.length - 1 ? prev + 1 : 0))}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer p-1"
-              title="Next Slice"
+            <div
+              ref={thumbnailRailRef}
+              onScroll={handleThumbnailRailScroll}
+              className="viewer-toolbar px-2 py-1.5 flex gap-2 overflow-x-auto viewer-scroll flex-1 bg-slate-950/90 border border-white/10 rounded-xl scroll-smooth"
             >
-              <i className="fas fa-chevron-right text-xs"></i>
-            </button>
-
-            <span className="text-xs font-semibold text-slate-300 tabular-nums whitespace-nowrap pl-1">
-              Slice <strong className="text-white">{safeActiveImageIndex + 1}</strong> / {displaySlices.length}
-            </span>
-          </div>
-
-          {/* Row 2: Thumbnail Rail */}
-          <div className="flex items-center justify-center">
-            <div className="viewer-toolbar px-2 py-1 flex gap-2 overflow-x-auto viewer-scroll max-w-full bg-slate-950/90 border border-white/10 rounded-xl">
               {displaySlices.map((slice, idx) => (
-                <div
+                <button
                   key={idx}
+                  ref={(el) => (thumbnailItemRefs.current[idx] = el)}
+                  type="button"
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`w-9 h-9 rounded-lg flex-shrink-0 cursor-pointer border-2 transition-all duration-200 overflow-hidden relative ${
+                  className={`w-10 h-10 rounded-lg flex-shrink-0 cursor-pointer border-2 transition-all duration-200 overflow-hidden relative ${
                     safeActiveImageIndex === idx
-                      ? "border-brand-500 ring-2 ring-brand-500/30 scale-105"
+                      ? "border-brand-500 ring-2 ring-brand-500/40 scale-105 z-10"
                       : slice.isKeySlice
-                      ? "border-slate-500 opacity-90"
-                      : "border-transparent hover:border-white/20 opacity-60 hover:opacity-100"
+                      ? "border-slate-500 opacity-90 hover:opacity-100"
+                      : "border-transparent hover:border-white/30 opacity-60 hover:opacity-100"
                   }`}
+                  title={`Slice #${idx + 1}${slice.isKeySlice ? " (Key Slice)" : ""}`}
                 >
-                  <img src={slice.url} alt="" className="w-full h-full object-cover" />
+                  <img src={slice.url} alt="" className="w-full h-full object-cover pointer-events-none" />
                   {slice.isKeySlice && (
                     <span
                       className="absolute top-1 left-1 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-slate-950 shadow"
                       title="Key Slice"
                     />
                   )}
-                  <span className="absolute bottom-0 right-0 bg-black/80 text-white text-[9px] font-bold px-1">
+                  <span className="absolute bottom-0 right-0 bg-black/80 text-white text-[9px] font-bold px-1 rounded-tl">
                     #{idx + 1}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
+
+            <button
+              type="button"
+              onClick={() => handleScrollThumbnails("right")}
+              className="w-7 h-7 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center flex-shrink-0 shadow-xs"
+              title="Scroll thumbnails right"
+            >
+              <i className="fas fa-chevron-right text-xs"></i>
+            </button>
+          </div>
+
+          {/* Row 2: Scrollbar Slider Navigating the Thumbnail Slices */}
+          <div className="flex items-center gap-3 max-w-3xl mx-auto w-full px-2">
+            <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap flex items-center gap-1.5">
+              <i className="fas fa-arrows-left-right text-[10px] text-slate-500"></i> Thumbnails:
+            </span>
+
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={thumbnailScrollPercent}
+              onChange={handleThumbnailSliderChange}
+              className="w-full h-1.5 bg-slate-800 accent-brand-500 rounded-lg cursor-pointer transition-all"
+              title="Scroll through uploaded slice thumbnails"
+            />
+
+            <span className="text-xs font-semibold text-slate-300 tabular-nums whitespace-nowrap pl-1">
+              Selected: <strong className="text-white">#{safeActiveImageIndex + 1}</strong> / {displaySlices.length}
+            </span>
           </div>
         </div>
       )}
