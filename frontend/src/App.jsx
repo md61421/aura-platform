@@ -6,6 +6,7 @@ import Submission from "./pages/Submission";
 import Admin from "./pages/Admin";
 import Compare from "./pages/Compare";
 import Profile from "./pages/Profile";
+import Guide from "./pages/Guide";
 import Layout from "./components/Layout";
 import { RequireRole } from "./auth/RequireRole";
 
@@ -18,6 +19,7 @@ function App() {
           <Route path="/auth" element={<Auth />} />
           <Route path="/artifact/:id" element={<Detail />} />
           <Route path="/submit" element={<Submission />} />
+          <Route path="/guide" element={<Guide />} />
           <Route
             path="/admin"
             element={

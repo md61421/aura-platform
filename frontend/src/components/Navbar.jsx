@@ -23,12 +23,13 @@ const Navbar = () => {
   const navLinks = [
     { name: "Browse", path: "/" },
     { name: "Submit Artifact", path: submitPath, activePath: "/submit" },
-    ...(canReview ? [{ name: "Admin Panel", path: "/admin", badge: true }] : []),
+    { name: "Guide", path: "/guide" },
     ...(isAuthenticated
       ? [
           { name: "My Submissions", path: "/profile" },
         ]
       : []),
+    ...(canReview ? [{ name: "Admin Panel", path: "/admin", badge: true }] : []),
   ];
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
